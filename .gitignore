@@ -1,0 +1,32 @@
+# Secrets and machine-specific environment files in every module
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencies and generated application output
+**/node_modules/
+**/.next/
+**/out/
+**/dist/
+**/dist-ssr/
+**/build/
+**/release/
+**/coverage/
+**/test-results/
+**/playwright-report/
+
+# Logs, caches and local tooling
+**/*.log
+**/.pnp
+**/.pnp.js
+**/*.tsbuildinfo
+**/.vercel/
+**/.idea/
+**/.vscode/
+**/.DS_Store
+**/Thumbs.db
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+
