@@ -1,18 +1,19 @@
 import mongoose from "mongoose";
 
-const MONGODB_URI = process.env.MONGODB_URI;
-
-if (!MONGODB_URI) {
-  throw new Error("Please define the MONGODB_URI environment variable inside .env.local");
-}
-
-let cached = global.mongoose;
+let cached = globalThis.mongoose;
 
 if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
+  cached = globalThis.mongoose = { conn: null, promise: null };
 }
 
 async function connectToDatabase() {
+  const mongoUri = process.env.MONGODB_URI?.trim();
+  if (!mongoUri) {
+    throw new Error(
+      "MONGODB_URI is not configured. Add it to the deployment environment before using database features."
+    );
+  }
+
   if (cached.conn) {
     return cached.conn;
   }
@@ -22,7 +23,7 @@ async function connectToDatabase() {
       bufferCommands: false,
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
+    cached.promise = mongoose.connect(mongoUri, opts).then((mongoose) => {
       return mongoose;
     });
   }
