@@ -6,11 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export default function GoogleIdentityButton({ intent, onCredential, onError }) {
   const buttonRef = useRef(null);
   const callbackRef = useRef(onCredential);
+  const errorRef = useRef(onError);
+  const busyRef = useRef(false);
   const [configuration, setConfiguration] = useState(null);
   const [scriptReady, setScriptReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [nonceVersion, setNonceVersion] = useState(0);
   callbackRef.current = onCredential;
+  errorRef.current = onError;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -23,10 +26,10 @@ export default function GoogleIdentityButton({ intent, onCredential, onError }) 
       })
       .then((data) => setConfiguration(data))
       .catch((error) => {
-        if (!controller.signal.aborted) onError?.(error.message);
+        if (!controller.signal.aborted) errorRef.current?.(error.message);
       });
     return () => controller.abort();
-  }, [nonceVersion, onError]);
+  }, [nonceVersion]);
 
   const renderButton = useCallback(() => {
     if (!configuration?.clientId || !configuration?.nonce || !window.google?.accounts?.id || !buttonRef.current) return;
@@ -38,12 +41,14 @@ export default function GoogleIdentityButton({ intent, onCredential, onError }) 
       ux_mode: "popup",
       cancel_on_tap_outside: true,
       callback: async ({ credential }) => {
-        if (!credential || busy) return;
+        if (!credential || busyRef.current) return;
+        busyRef.current = true;
         setBusy(true);
         try {
           const result = await callbackRef.current?.(credential);
           if (!result?.success) setNonceVersion((value) => value + 1);
         } finally {
+          busyRef.current = false;
           setBusy(false);
         }
       },
@@ -57,7 +62,7 @@ export default function GoogleIdentityButton({ intent, onCredential, onError }) 
       logo_alignment: "left",
       width,
     });
-  }, [configuration, busy]);
+  }, [configuration]);
 
   useEffect(() => {
     if (window.google?.accounts?.id) setScriptReady(true);
@@ -66,9 +71,9 @@ export default function GoogleIdentityButton({ intent, onCredential, onError }) 
   useEffect(() => {
     if (!scriptReady || !configuration) return undefined;
     renderButton();
-    const observer = new ResizeObserver(renderButton);
-    if (buttonRef.current) observer.observe(buttonRef.current);
-    return () => observer.disconnect();
+    return () => {
+      buttonRef.current?.replaceChildren();
+    };
   }, [scriptReady, configuration, renderButton]);
 
   return (
@@ -81,7 +86,7 @@ export default function GoogleIdentityButton({ intent, onCredential, onError }) 
         src="https://accounts.google.com/gsi/client"
         strategy="afterInteractive"
         onLoad={() => setScriptReady(true)}
-        onError={() => onError?.("Google sign-in could not be loaded. Check your connection and try again.")}
+        onError={() => errorRef.current?.("Google sign-in could not be loaded. Check your connection and try again.")}
       />
       <div ref={buttonRef} className={busy ? "pointer-events-none opacity-60" : ""} />
       {(!scriptReady || !configuration) && (

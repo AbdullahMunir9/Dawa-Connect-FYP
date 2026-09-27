@@ -47,7 +47,10 @@ export async function GET(req) {
       return response;
     }
 
-    return NextResponse.json({ user: marketplaceUserView(userDoc) }, { status: 200 });
+    return NextResponse.json(
+      { user: marketplaceUserView(userDoc) },
+      { status: 200, headers: { "Cache-Control": "no-store" } }
+    );
 
   } catch (error) {
     console.error("Auth check error:", error);

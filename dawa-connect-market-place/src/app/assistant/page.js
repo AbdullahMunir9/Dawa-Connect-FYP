@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Send, Bot, Loader2, LockKeyhole, Sparkles, RotateCcw, Copy, Check, ShieldAlert, Pill, AlertTriangle, HelpCircle, Stethoscope, Zap } from "lucide-react";
+import { Send, Bot, Loader2, LockKeyhole, Sparkles, RotateCcw, Copy, Check, ShieldAlert, Pill, AlertTriangle, HelpCircle, Stethoscope, Zap, ArrowDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/context/AuthContext";
 import { cn, initials } from "@/components/ui";
@@ -49,7 +49,7 @@ export default function AssistantPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [quota, setQuota] = useState(null);
-  const messagesEndRef = useRef(null);
+  const messagesViewportRef = useRef(null);
   const textareaRef = useRef(null);
 
   /** Full text received from the API stream (may run ahead of what we show). */
@@ -75,8 +75,6 @@ export default function AssistantPage() {
       .catch(() => { if (!cancelled) setQuota(null); });
     return () => { cancelled = true; };
   }, [user]);
-
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   // Auto-grow the composer up to ~6 lines.
   useEffect(() => {
@@ -169,6 +167,10 @@ export default function AssistantPage() {
   const handleSubmit = (e) => { e.preventDefault(); void sendMessage(input); };
   const onKeyDown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(input); } };
   const resetConversation = () => { if (isLoading) return; clearTypewriter(); setMessages([GREETING]); setInput(""); };
+  const jumpToLatest = () => {
+    const viewport = messagesViewportRef.current;
+    if (viewport) viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+  };
 
   if (authLoading) {
     return <div className="flex min-h-[calc(100vh-64px)] items-center justify-center bg-gray-50"><Loader2 className="h-8 w-8 animate-spin text-blue-700" aria-label="Checking session" /></div>;
@@ -243,7 +245,7 @@ export default function AssistantPage() {
               {quota && <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold", limitReached ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-600")}>{quota.remaining} left today</span>}
             </header>
 
-            <div className="flex-1 space-y-5 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.05),transparent_60%)] px-4 py-5 sm:px-6">
+            <div ref={messagesViewportRef} data-testid="messages-viewport" className="relative flex-1 space-y-5 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.05),transparent_60%)] px-4 py-5 sm:px-6">
               {messages.map((msg, index) => {
                 const isUser = msg.role === "user";
                 const streaming = isLoading && !isUser && index === messages.length - 1;
@@ -282,7 +284,11 @@ export default function AssistantPage() {
               {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
                 <div className="flex gap-3"><span className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700"><Bot className="h-4 w-4" /></span><div className="inline-flex items-center gap-2 rounded-2xl rounded-tl-md border border-gray-200 bg-white px-4 py-3 text-sm text-gray-500 shadow-sm"><Loader2 className="h-4 w-4 animate-spin" /> Thinking…</div></div>
               )}
-              <div ref={messagesEndRef} />
+              {messages.length > 1 && (
+                <button type="button" onClick={jumpToLatest} className="sticky bottom-1 ml-auto flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/95 px-3 py-1.5 text-xs font-semibold text-gray-600 shadow-md backdrop-blur transition hover:border-blue-200 hover:text-blue-700" aria-label="Jump to the latest message">
+                  <ArrowDown className="h-3.5 w-3.5" /> Latest
+                </button>
+              )}
             </div>
 
             <div className="border-t border-gray-100 bg-white p-3 sm:p-4">

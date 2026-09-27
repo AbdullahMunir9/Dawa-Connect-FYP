@@ -22,7 +22,7 @@ export default function Signup() {
 
   const handleGoogle = async (credential) => {
     setError("");
-    const result = await googleAuthenticate(credential, "signup", "/");
+    const result = await googleAuthenticate(credential, "signup", "/dashboard");
     if (!result.success) setError(result.message || "Google registration failed.");
     return result;
   };
