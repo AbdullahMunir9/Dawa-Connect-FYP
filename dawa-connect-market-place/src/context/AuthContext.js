@@ -2,6 +2,7 @@
 
 import { createContext, useState, useEffect, useContext, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { authPageHref, safeAuthRedirect } from "@/lib/authRedirect.mjs";
 
 const AuthContext = createContext();
 
@@ -35,13 +36,6 @@ export function AuthProvider({ children }) {
     void checkUserLoggedIn();
   }, [checkUserLoggedIn]);
 
-  const safePath = (redirectTo) =>
-    typeof redirectTo === "string" &&
-    redirectTo.startsWith("/") &&
-    !redirectTo.startsWith("//")
-      ? redirectTo
-      : "/";
-
   const finishAuthentication = async (revision, redirectTo) => {
     // Confirm that the HttpOnly cookie from the login response is usable before
     // entering a route protected by proxy.js. This also gives us the canonical
@@ -73,7 +67,7 @@ export function AuthProvider({ children }) {
 
     setUser(sessionData.user);
     setLoading(false);
-    router.replace(safePath(redirectTo));
+    router.replace(safeAuthRedirect(redirectTo));
     router.refresh();
     return { success: true };
   };
@@ -109,7 +103,7 @@ export function AuthProvider({ children }) {
     return finishAuthentication(revision, redirectTo);
   };
 
-  const signup = async (name, email, password, phone, city) => {
+  const signup = async (name, email, password, phone, city, redirectTo = "/") => {
     const res = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -119,7 +113,7 @@ export function AuthProvider({ children }) {
     const data = await res.json();
 
     if (res.ok) {
-      router.push("/login");
+      router.replace(authPageHref("/login", redirectTo));
       return { success: true };
     } else {
       return { success: false, message: data.message };

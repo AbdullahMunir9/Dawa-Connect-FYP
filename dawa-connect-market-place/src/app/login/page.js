@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import AuthSplitLayout from "@/components/auth/AuthSplitLayout";
 import GoogleIdentityButton from "@/components/auth/GoogleIdentityButton";
+import { authPageHref, safeAuthRedirect } from "@/lib/authRedirect.mjs";
 
 const inputClass =
   "mt-2 block w-full rounded-lg border border-gray-200 bg-white px-4 py-[0.7rem] text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-[#009688]";
@@ -14,11 +15,15 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [nextPath, setNextPath] = useState("/");
   const { login, googleAuthenticate } = useAuth();
+
+  useEffect(() => {
+    setNextPath(safeAuthRedirect(new URLSearchParams(window.location.search).get("next")));
+  }, []);
 
   const handleGoogle = async (credential) => {
     setError("");
-    const nextPath = new URLSearchParams(window.location.search).get("next") || "/";
     const result = await googleAuthenticate(credential, "login", nextPath);
     if (!result.success) setError(result.message || "Google sign-in failed.");
     return result;
@@ -29,7 +34,6 @@ export default function Login() {
     setLoading(true);
     setError("");
 
-    const nextPath = new URLSearchParams(window.location.search).get("next") || "/";
     const res = await login(email, password, nextPath);
     if (!res.success) {
       setError(res.message || "An error occurred during login");
@@ -111,7 +115,7 @@ export default function Login() {
         <p className="text-center text-sm text-gray-500">
           New here?{" "}
           <Link
-            href="/signup"
+            href={authPageHref("/signup", nextPath)}
             className="font-semibold text-[#009688] hover:text-[#00796b]"
           >
             Register here

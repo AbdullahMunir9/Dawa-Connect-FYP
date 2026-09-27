@@ -5,16 +5,22 @@ import { Search, ShoppingCart, Bell, User, MapPinned } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { recordSearchAndNavigate } from "@/lib/searchNavigation";
+import { authPageHref } from "@/lib/authRedirect.mjs";
 import VoiceMedicineSearchButton from "@/components/VoiceMedicineSearchButton";
 
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
   const [navQuery, setNavQuery] = useState("");
+  const [authReturnPath, setAuthReturnPath] = useState(pathname || "/");
   const { user, loading, logout } = useAuth();
   const { totalItems } = useCart();
+
+  useEffect(() => {
+    setAuthReturnPath(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+  }, [pathname]);
   
   const hideNavSearch =
     pathname.startsWith("/pharmacies") ||
@@ -115,12 +121,12 @@ export default function Navbar() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <Link href="/login" aria-label="Log in" className="hidden sm:flex text-gray-500 hover:text-gray-900 items-center gap-2">
+                    <Link href={authPageHref("/login", authReturnPath)} aria-label="Log in" className="hidden sm:flex text-gray-500 hover:text-gray-900 items-center gap-2">
                       <User className="h-5 w-5" />
                       <span className="hidden lg:inline text-sm font-medium">Login</span>
                     </Link>
                     <Link
-                      href="/signup"
+                      href={authPageHref("/signup", authReturnPath)}
                       className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
                     >
                       Sign up

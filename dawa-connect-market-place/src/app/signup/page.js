@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import AuthSplitLayout from "@/components/auth/AuthSplitLayout";
 import GoogleIdentityButton from "@/components/auth/GoogleIdentityButton";
+import { authPageHref, safeAuthRedirect } from "@/lib/authRedirect.mjs";
 
 const inputClass =
   "mt-2 block w-full rounded-lg border border-gray-200 bg-white px-4 py-[0.7rem] text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-[#009688]";
@@ -18,11 +19,16 @@ export default function Signup() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [nextPath, setNextPath] = useState("/");
   const { signup, googleAuthenticate } = useAuth();
+
+  useEffect(() => {
+    setNextPath(safeAuthRedirect(new URLSearchParams(window.location.search).get("next")));
+  }, []);
 
   const handleGoogle = async (credential) => {
     setError("");
-    const result = await googleAuthenticate(credential, "signup", "/dashboard");
+    const result = await googleAuthenticate(credential, "signup", nextPath);
     if (!result.success) setError(result.message || "Google registration failed.");
     return result;
   };
@@ -32,7 +38,7 @@ export default function Signup() {
     setLoading(true);
     setError("");
 
-    const res = await signup(name, email, password, phone, city);
+    const res = await signup(name, email, password, phone, city, nextPath);
     if (!res.success) {
       setError(res.message || "An error occurred during signup");
     }
@@ -167,7 +173,7 @@ export default function Signup() {
         <p className="text-center text-sm text-gray-500">
           Already have an account?{" "}
           <Link
-            href="/login"
+            href={authPageHref("/login", nextPath)}
             className="font-semibold text-[#009688] hover:text-[#00796b]"
           >
             Sign in here

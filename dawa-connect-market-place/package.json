@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:auth": "node --test src/lib/googleIdentity.test.mjs",
+    "test:auth": "node --test src/lib/googleIdentity.test.mjs src/lib/authRedirect.test.mjs",
     "test:auth-ui": "playwright test --config playwright.auth-ui.config.mjs",
     "test:maps": "node --test src/lib/healthcareGeo.test.mjs src/lib/healthcareProvider.test.mjs src/lib/healthcareMapStyle.test.mjs",
     "test:maps:e2e": "playwright test --config playwright.healthcare.config.mjs",

@@ -189,7 +189,7 @@ export default function AssistantPage() {
             <p className="inline-flex items-center gap-2 text-sm font-semibold text-gray-800"><LockKeyhole className="h-4 w-4 text-blue-700" /> Sign in to start a conversation</p>
             <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
               <Link href="/login?next=/assistant" className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-800">Sign in</Link>
-              <Link href="/signup" className="rounded-xl border border-gray-200 px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50">Create an account</Link>
+              <Link href="/signup?next=/assistant" className="rounded-xl border border-gray-200 px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50">Create an account</Link>
             </div>
           </div>
         </section>
