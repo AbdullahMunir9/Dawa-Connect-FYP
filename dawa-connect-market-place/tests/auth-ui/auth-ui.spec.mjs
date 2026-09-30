@@ -95,7 +95,55 @@ test("Google signup returns to the page that requested authentication", async ({
   await page.goto("/signup?next=%2Fassistant");
   await page.locator("#mock-google-button").click();
 
-  await expect(page).toHaveURL(/\/assistant$/);
+  await expect(page).toHaveURL(/\/assistant$/, { timeout: 15_000 });
+  await expect(page.locator('[aria-label="Conversation"]')).toBeVisible();
+});
+
+test("email signup requires OTP verification and then returns to the requesting page", async ({ page }) => {
+  let authenticated = false;
+  await page.route("**/api/auth/me", (route) => route.fulfill({
+    status: authenticated ? 200 : 401,
+    contentType: "application/json",
+    body: JSON.stringify(authenticated ? { user } : { message: "Not authenticated" }),
+  }));
+  await page.route(/\/api\/auth\/signup$/, (route) => route.fulfill({
+    status: 202,
+    contentType: "application/json",
+    body: JSON.stringify({
+      challengeId: "test-challenge-id-that-is-long-enough-123456",
+      maskedEmail: "te******@example.com",
+      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+      resendAvailableAt: new Date(Date.now() + 60_000).toISOString(),
+    }),
+  }));
+  await page.route("**/api/auth/signup/verify", (route) => {
+    authenticated = true;
+    return route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ user }),
+    });
+  });
+  await page.route("**/api/chat", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ limit: 20, remaining: 20, used: 0 }),
+  }));
+
+  await page.goto("/signup?next=%2Fassistant");
+  await page.locator("#signup-name").fill("Test User");
+  await page.locator("#signup-email").fill("test@example.com");
+  await page.locator("#signup-phone").fill("+92 300 1234567");
+  await page.locator("#signup-city").fill("Lahore");
+  await page.locator("#signup-password").fill("Password1!");
+  await page.getByRole("button", { name: "Continue with email" }).click();
+
+  await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
+  await expect(page.getByText(/Code expires in (5:00|4:5\d)/)).toBeVisible();
+  await page.locator("#signup-otp").fill("123456");
+  await page.getByRole("button", { name: "Verify and create account" }).click();
+
+  await expect(page).toHaveURL(/\/assistant$/, { timeout: 15_000 });
   await expect(page.locator('[aria-label="Conversation"]')).toBeVisible();
 });
 

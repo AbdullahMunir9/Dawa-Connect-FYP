@@ -100,13 +100,13 @@ export async function POST(request) {
           return failure("This email is already connected to another Google account.", 409);
         }
         if (!identity.authoritativeEmail) {
-          return failure("Sign in with your password for this email. Email OTP linking will be available next.", 409);
+          return failure("Sign in with your password for this email. Google linking is not available for this address.", 409);
         }
       } else if (intent === "login") {
         return failure("No Marketplace account uses this Google account. Choose Register first.", 404);
       } else {
         if (!identity.authoritativeEmail) {
-          return failure("Use a Gmail or Google Workspace address, or register with email and verify it by OTP when that option is available.", 400);
+          return failure("Use a Gmail or Google Workspace address, or register with email and verify it using the OTP sent to your inbox.", 400);
         }
         user = new User({
           name: identity.name,

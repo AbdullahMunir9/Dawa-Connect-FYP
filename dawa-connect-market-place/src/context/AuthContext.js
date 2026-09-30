@@ -2,7 +2,7 @@
 
 import { createContext, useState, useEffect, useContext, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { authPageHref, safeAuthRedirect } from "@/lib/authRedirect.mjs";
+import { safeAuthRedirect } from "@/lib/authRedirect.mjs";
 
 const AuthContext = createContext();
 
@@ -107,17 +107,42 @@ export function AuthProvider({ children }) {
     const res = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({ name, email, password, phone, city }),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    return res.ok
+      ? { success: true, ...data, redirectTo: safeAuthRedirect(redirectTo) }
+      : { success: false, message: data.message || "Registration could not be started.", ...data };
+  };
 
-    if (res.ok) {
-      router.replace(authPageHref("/login", redirectTo));
-      return { success: true };
-    } else {
-      return { success: false, message: data.message };
+  const verifySignupOtp = async (challengeId, otp, redirectTo = "/") => {
+    const revision = ++sessionRevisionRef.current;
+    const res = await fetch("/api/auth/signup/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ challengeId, otp }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, message: data.message || "The code could not be verified.", ...data };
     }
+    return finishAuthentication(revision, redirectTo);
+  };
+
+  const resendSignupOtp = async (challengeId) => {
+    const res = await fetch("/api/auth/signup/resend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ challengeId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    return res.ok
+      ? { success: true, ...data }
+      : { success: false, message: data.message || "Another code could not be sent.", ...data };
   };
 
   const logout = async () => {
@@ -130,7 +155,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, googleAuthenticate, signup, logout, checkUserLoggedIn }}>
+    <AuthContext.Provider value={{ user, loading, login, googleAuthenticate, signup, verifySignupOtp, resendSignupOtp, logout, checkUserLoggedIn }}>
       {children}
     </AuthContext.Provider>
   );
