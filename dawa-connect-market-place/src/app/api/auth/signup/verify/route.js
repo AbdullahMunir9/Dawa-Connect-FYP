@@ -93,8 +93,6 @@ export async function POST(req) {
         email: claimed.email,
         password: claimed.passwordHash,
         status: "active",
-        phone: claimed.phone,
-        city: claimed.city,
         emailVerifiedAt: new Date(),
       });
     } catch (error) {

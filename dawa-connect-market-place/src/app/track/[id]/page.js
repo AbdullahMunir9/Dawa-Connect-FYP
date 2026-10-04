@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Check, Clock, Home, Package, Store, Truck } from "lucide-react";
+import { Check, Clock, Home, MessageCircle, Package, Store, Truck } from "lucide-react";
 import { formatPKR } from "@/lib/currency";
 import { useAuth } from "@/context/AuthContext";
 
@@ -139,6 +139,9 @@ export default function TrackDelivery() {
               {address.phone && <p className="text-sm text-gray-500 mt-2">{address.phone}</p>}
             </section>
 
+            <Link href={`/chat/order/${encodeURIComponent(order.orderId)}`} className="flex items-center justify-center gap-2 rounded-lg bg-blue-800 py-3 text-center font-semibold text-white hover:bg-blue-900">
+              <MessageCircle className="h-4 w-4" /> Chat with pharmacy
+            </Link>
             <Link href={user ? "/dashboard/orders" : "/"} className="block text-center py-2.5 border border-blue-200 text-blue-700 rounded-lg font-medium hover:bg-blue-50">
               {user ? "View all orders" : "Continue shopping"}
             </Link>

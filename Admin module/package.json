@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server": "node server/index.js"
+    "server": "node server/index.js",
+    "test:chat": "node --test server/services/chatPolicy.test.js server/middleware/chatAuth.test.js"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.4",
@@ -25,6 +26,7 @@
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.18.3",
     "recharts": "^3.8.1",
+    "socket.io": "^4.8.1",
     "tailwindcss": "^4.2.4"
   },
   "devDependencies": {

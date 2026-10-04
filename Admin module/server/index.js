@@ -1,14 +1,19 @@
 import './env.js';
 import express from 'express';
+import { createServer } from 'node:http';
 import mongoose from 'mongoose';
 import cors from 'cors';
+import { Server as SocketIOServer } from 'socket.io';
 import adminRoutes from './routes/adminRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import complaintRoutes from './routes/complaintRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
+import createChatRouter from './routes/chatRoutes.js';
 import pharmacyDb from './db/pharmacyConnection.js';
+import { configureChatSocket } from './sockets/chatSocket.js';
 
 const app = express();
+const httpServer = createServer(app);
 const PORT = Number(process.env.PORT) || 5000;
 
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -26,14 +31,27 @@ if (!PHARMACY_MONGODB_URI) {
 // Only the admin UI origin(s) may call this API from a browser.
 const allowedOrigins = String(process.env.CORS_ORIGIN || 'http://localhost:5173')
   .split(',').map((origin) => origin.trim()).filter(Boolean);
+const chatOrigins = String(process.env.CHAT_CORS_ORIGINS || 'http://localhost:3000')
+  .split(',').map((origin) => origin.trim()).filter(Boolean);
+const browserOrigins = [...new Set([...allowedOrigins, ...chatOrigins])];
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    if (!origin || browserOrigins.includes(origin)) return callback(null, true);
     return callback(new Error('Origin not allowed by CORS'));
   },
 }));
 app.use(express.json({ limit: '200kb' }));
 app.set('trust proxy', false);
+
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: chatOrigins,
+    methods: ['GET', 'POST'],
+    credentials: false,
+  },
+  maxHttpBufferSize: 32 * 1024,
+});
+configureChatSocket(io);
 
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, _res, next) => {
@@ -55,6 +73,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/audit', auditRoutes);
+app.use('/api/chat', createChatRouter());
 
 app.use((_req, res) => res.status(404).json({ message: 'Not found' }));
 app.use((error, _req, res, _next) => {
@@ -71,6 +90,6 @@ mongoose.connect(MONGODB_URI)
 pharmacyDb.on('connected', () => console.log('Connected to Pharmacy MongoDB'));
 pharmacyDb.on('error', (err) => console.error('Pharmacy MongoDB connection error:', err.message));
 
-app.listen(PORT, () => {
-  console.log(`Admin API listening on port ${PORT} (allowed origins: ${allowedOrigins.join(', ')})`);
+httpServer.listen(PORT, () => {
+  console.log(`DawaConnect API and chat service listening on port ${PORT} (allowed origins: ${browserOrigins.join(', ')})`);
 });

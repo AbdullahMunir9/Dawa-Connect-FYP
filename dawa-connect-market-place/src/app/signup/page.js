@@ -23,8 +23,6 @@ function clockLabel(seconds) {
 export default function Signup() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [city, setCity] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [challenge, setChallenge] = useState(null);
@@ -89,7 +87,7 @@ export default function Signup() {
     setLoading(true);
     setError("");
     setNotice("");
-    const result = await signup(name, email, password, phone, city, nextPath);
+    const result = await signup(name, email, password, nextPath);
     if (!result.success) {
       setError(result.message || "Registration could not be started.");
       setLoading(false);
@@ -209,8 +207,6 @@ export default function Signup() {
           {error && <div role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-center text-sm text-red-600">{error}</div>}
           <div><label htmlFor="signup-name" className="text-sm font-medium text-gray-700">Full name</label><input id="signup-name" type="text" required autoComplete="name" maxLength={60} className={inputClass} placeholder="Ahmad Khan" value={name} onChange={(event) => setName(event.target.value)} /></div>
           <div><label htmlFor="signup-email" className="text-sm font-medium text-gray-700">Email Address</label><input id="signup-email" type="email" required autoComplete="email" maxLength={254} className={inputClass} placeholder="you@example.com" value={email} onChange={(event) => setEmail(event.target.value)} /></div>
-          <div><label htmlFor="signup-phone" className="text-sm font-medium text-gray-700">Phone Number</label><input id="signup-phone" type="tel" required autoComplete="tel" maxLength={40} className={inputClass} placeholder="+92 300 1234567" value={phone} onChange={(event) => setPhone(event.target.value)} /></div>
-          <div><label htmlFor="signup-city" className="text-sm font-medium text-gray-700">City</label><input id="signup-city" type="text" required autoComplete="address-level2" maxLength={100} className={inputClass} placeholder="Lahore" value={city} onChange={(event) => setCity(event.target.value)} /></div>
           <div>
             <label htmlFor="signup-password" className="text-sm font-medium text-gray-700">Password</label>
             <input id="signup-password" type="password" required autoComplete="new-password" minLength={8} pattern={strongPasswordPattern} className={inputClass} title="At least 8 characters, including 1 uppercase letter, 1 number, and 1 special character" placeholder="Min 8 chars, Aa1@..." value={password} onChange={(event) => setPassword(event.target.value)} />

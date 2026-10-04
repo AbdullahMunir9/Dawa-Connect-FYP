@@ -7,7 +7,8 @@ import Inventory from './pages/Inventory';
 import Orders from './pages/Orders';
 import Analytics from './pages/Analytics';
 import { ProfilePage, ReviewsPage, ReturnsPage } from './pages/OtherPages';
-import { NotificationsPage, ChatPage } from './pages/MorePages';
+import { NotificationsPage } from './pages/MorePages';
+import ChatPage from './pages/Chat';
 import Complaints from './pages/Complaints';
 
 const NAV_ITEMS = [

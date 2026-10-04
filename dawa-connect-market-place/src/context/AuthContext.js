@@ -103,12 +103,12 @@ export function AuthProvider({ children }) {
     return finishAuthentication(revision, redirectTo);
   };
 
-  const signup = async (name, email, password, phone, city, redirectTo = "/") => {
+  const signup = async (name, email, password, redirectTo = "/") => {
     const res = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ name, email, password, phone, city }),
+      body: JSON.stringify({ name, email, password }),
     });
 
     const data = await res.json().catch(() => ({}));

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:auth": "node --test src/lib/googleIdentity.test.mjs src/lib/authRedirect.test.mjs src/lib/emailVerification.test.mjs",
+    "test:commerce": "node --test src/lib/cartGroups.test.mjs",
     "test:auth-ui": "playwright test --config playwright.auth-ui.config.mjs",
     "test:maps": "node --test src/lib/healthcareGeo.test.mjs src/lib/healthcareProvider.test.mjs src/lib/healthcareMapStyle.test.mjs",
     "test:maps:e2e": "playwright test --config playwright.healthcare.config.mjs",
@@ -30,7 +31,8 @@
     "react-dom": "19.2.5",
     "react-leaflet": "^5.0.0",
     "react-markdown": "^10.1.0",
-    "resend": "^6.30.0"
+    "resend": "^6.30.0",
+    "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

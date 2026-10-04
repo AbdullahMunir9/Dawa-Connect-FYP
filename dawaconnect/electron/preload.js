@@ -39,10 +39,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateStatus: (payload) => ipcRenderer.invoke('complaints:update-status', payload)
   },
   chat: {
-    ask: (payload) => ipcRenderer.invoke('chat:ask', payload),
-    syncThreads: (payload) => ipcRenderer.invoke('chat:sync-threads', payload),
+    connect: (payload) => ipcRenderer.invoke('chat:connect', payload),
+    listConversations: () => ipcRenderer.invoke('chat:list-conversations'),
+    join: (payload) => ipcRenderer.invoke('chat:join', payload),
     listMessages: (payload) => ipcRenderer.invoke('chat:list-messages', payload),
     sendMessage: (payload) => ipcRenderer.invoke('chat:send-message', payload),
-    logs: (payload) => ipcRenderer.invoke('chat:logs', payload)
+    markRead: (payload) => ipcRenderer.invoke('chat:mark-read', payload),
+    onEvent: (callback) => {
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on('chat:event', listener)
+      return () => ipcRenderer.removeListener('chat:event', listener)
+    }
   }
 })

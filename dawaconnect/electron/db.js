@@ -40,9 +40,6 @@ export async function initDatabase() {
   await db.collection('notifications').createIndex({ ownerId: 1, createdAt: -1 })
   await db.collection('profiles').createIndex({ ownerId: 1 }, { unique: true })
   await db.collection('profiles').createIndex({ location: '2dsphere' })
-  await db.collection('chat_threads').createIndex({ ownerId: 1, updatedAt: -1 })
-  await db.collection('chat_messages').createIndex({ ownerId: 1, threadId: 1, createdAt: 1 })
-  await db.collection('chat_ai_logs').createIndex({ ownerId: 1, createdAt: -1 })
   await db.collection('sessions').createIndex({ token: 1 }, { unique: true })
   await db.collection('sessions').createIndex({ userId: 1, revokedAt: 1, expiresAt: 1 })
   await db.collection('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
@@ -209,23 +206,6 @@ async function seedInitialData(ownerId, payload) {
     { ownerId, type: 'order', message: 'Welcome! Your pharmacy account is active.', read: false, color: '#14b8a6', createdAt: now, updatedAt: now }
   ])
 
-  const chatThread = await getDb().collection('chat_threads').insertOne({
-    ownerId,
-    customerName: 'Live Assistant',
-    status: 'open',
-    unread: 0,
-    lastMessage: 'Ask me anything about your pharmacy operations.',
-    updatedAt: now,
-    createdAt: now
-  })
-  await getDb().collection('chat_messages').insertOne({
-    ownerId,
-    threadId: chatThread.insertedId.toString(),
-    from: 'assistant',
-    text: 'Hello! I am your live pharmacy assistant. Ask me about stock, orders, analytics, or customer support replies.',
-    createdAt: now,
-    updatedAt: now
-  })
 }
 
 function mapUserSessionView(user) {
@@ -643,68 +623,6 @@ export async function upsertProfile(ownerId, updates) {
   await profiles.updateOne({ _id: existing._id }, { $set: patch })
   await syncUserDocFromProfilePatch(ownerKey, payload)
   return getProfile(ownerKey)
-}
-
-export async function syncChatThreadsFromOrders(ownerId) {
-  const orders = await getDb().collection('orders').find({ ownerId }).toArray()
-  const threads = getDb().collection('chat_threads')
-  const now = new Date()
-  for (const order of orders) {
-    const customerName = order.customer || 'Customer'
-    const customerPhone = order.phone || ''
-    const existing = await threads.findOne({ ownerId, customerName, customerPhone })
-    if (!existing) {
-      await threads.insertOne({
-        ownerId,
-        customerName,
-        customerPhone,
-        status: 'open',
-        unread: 0,
-        lastMessage: `Order ${order.id || ''} support thread`,
-        orderId: order.id || '',
-        createdAt: now,
-        updatedAt: now
-      })
-    }
-  }
-  const docs = await threads.find({ ownerId }).sort({ updatedAt: -1 }).toArray()
-  return docs.map(mapDoc)
-}
-
-export async function listChatMessages(ownerId, threadId) {
-  const docs = await getDb().collection('chat_messages').find({ ownerId, threadId }).sort({ createdAt: 1 }).toArray()
-  return docs.map(mapDoc)
-}
-
-export async function createChatMessage(ownerId, threadId, message) {
-  const now = new Date()
-  const payload = { ...message, ownerId, threadId, createdAt: now, updatedAt: now }
-  const result = await getDb().collection('chat_messages').insertOne(payload)
-  const threadFilter = ObjectId.isValid(threadId)
-    ? { ownerId, _id: new ObjectId(threadId) }
-    : { ownerId, id: threadId }
-  await getDb().collection('chat_threads').updateOne(
-    threadFilter,
-    {
-      $set: {
-        lastMessage: message.text || (message.attachments?.length ? 'Attachment sent' : 'New message'),
-        updatedAt: now
-      }
-    }
-  )
-  return mapDoc({ ...payload, _id: result.insertedId })
-}
-
-export async function logChatAi(ownerId, payload) {
-  const now = new Date()
-  const doc = { ownerId, ...payload, createdAt: now, updatedAt: now }
-  const result = await getDb().collection('chat_ai_logs').insertOne(doc)
-  return mapDoc({ ...doc, _id: result.insertedId })
-}
-
-export async function listChatAiLogs(ownerId, limit = 30) {
-  const docs = await getDb().collection('chat_ai_logs').find({ ownerId }).sort({ createdAt: -1 }).limit(limit).toArray()
-  return docs.map(mapDoc)
 }
 
 export async function requestPasswordReset(email) {

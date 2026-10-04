@@ -30,16 +30,14 @@ function reply(body, status, headers = {}) {
 export async function POST(req) {
   let challengeId = "";
   try {
-    const { name, email, password, phone, city } = await req.json();
+    const { name, email, password } = await req.json();
     const normalizedEmail = normalizeEmail(email);
     const trimmedName = String(name || "").trim();
-    const trimmedPhone = String(phone || "").trim();
-    const trimmedCity = String(city || "").trim();
 
-    if (!trimmedName || !normalizedEmail || !password || !trimmedPhone || !trimmedCity) {
+    if (!trimmedName || !normalizedEmail || !password) {
       return reply({ message: "Please fill in all fields." }, 400);
     }
-    if (trimmedName.length > 60 || trimmedPhone.length > 40 || trimmedCity.length > 100) {
+    if (trimmedName.length > 60) {
       return reply({ message: "One or more registration fields are too long." }, 400);
     }
     if (!isPlausibleEmail(normalizedEmail)) {
@@ -90,8 +88,6 @@ export async function POST(req) {
         challengeId,
         email: normalizedEmail,
         name: trimmedName,
-        phone: trimmedPhone,
-        city: trimmedCity,
         passwordHash,
         otpHash,
         expiresAt,

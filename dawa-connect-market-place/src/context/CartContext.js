@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { groupCartItemsByPharmacy } from "@/lib/cartGroups.mjs";
 
 const CartContext = createContext(null);
 const CART_STORAGE_KEY = "dawaconnect_cart_items";
@@ -153,11 +154,17 @@ export function CartProvider({ children }) {
 
   const clearCart = () => setItems([]);
 
+  const clearPharmacyCart = (pharmacyId) => {
+    const key = String(pharmacyId || "");
+    setItems((prev) => prev.filter((item) => String(item.pharmacyId) !== key));
+  };
+
   const totalItems = useMemo(() => items.reduce((sum, item) => sum + item.quantity, 0), [items]);
+  const pharmacyCarts = useMemo(() => groupCartItemsByPharmacy(items), [items]);
 
   const value = useMemo(
-    () => ({ items, addToCart, updateQuantity, removeFromCart, clearCart, totalItems }),
-    [items, totalItems]
+    () => ({ items, pharmacyCarts, isReady, addToCart, updateQuantity, removeFromCart, clearCart, clearPharmacyCart, totalItems }),
+    [items, pharmacyCarts, isReady, totalItems]
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

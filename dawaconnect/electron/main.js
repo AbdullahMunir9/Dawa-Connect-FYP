@@ -2,6 +2,8 @@ import 'dotenv/config'
 import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
+import { randomUUID } from 'crypto'
+import { io } from 'socket.io-client'
 import { configureLocationPermissions, isLocationRequester } from './locationPermissions.mjs'
 import { createLocationService } from './locationSearch.mjs'
 import {
@@ -23,11 +25,6 @@ import {
   removeCollectionItem,
   getProfile,
   upsertProfile,
-  syncChatThreadsFromOrders,
-  listChatMessages,
-  createChatMessage,
-  logChatAi,
-  listChatAiLogs,
   listComplaints,
   createComplaint,
   replyComplaint,
@@ -36,70 +33,91 @@ import {
 
 const isDev = !app.isPackaged
 const locationService = createLocationService()
+const chatServiceUrl = String(process.env.CHAT_SERVICE_URL || 'http://localhost:5000').replace(/\/$/, '')
+let chatSocket = null
+let chatSessionToken = ''
+let chatTokenRefreshTimer = null
 
-async function generateChatReply({ question, inventory = [], orders = [], pharmacyProfile = {}, history = [] }) {
-  const apiKey = process.env.OPENAI_API_KEY
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini'
-  const baseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1/chat/completions'
-  const safeHistory = Array.isArray(history) ? history.slice(-10) : []
-
-  if (!apiKey) {
-    const lowStock = inventory.filter((item) => Number(item.stock || 0) <= Number(item.threshold || 0)).slice(0, 3)
-    if (/low stock|stock/i.test(question) && lowStock.length) {
-      return `Low stock items: ${lowStock.map((i) => `${i.name} (${i.stock})`).join(', ')}.`
-    }
-    if (/order|pending|delivery/i.test(question)) {
-      const pending = orders.filter((o) => o.status === 'Pending').length
-      const delivered = orders.filter((o) => o.status === 'Delivered').length
-      return `You currently have ${pending} pending orders and ${delivered} delivered orders. Add OPENAI_API_KEY in .env for fully AI-powered answers.`
-    }
-    return 'I can answer basic pharmacy data questions now. For full AI answers to any question, set OPENAI_API_KEY in your .env and restart the app.'
+function broadcastChatEvent(type, data) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send('chat:event', { type, data })
   }
+}
 
-  const systemPrompt = [
-    'You are DawaConnect live pharmacy assistant for business users.',
-    'Answer clearly and concisely.',
-    'Use provided pharmacy data when relevant.',
-    'If asked medical diagnosis, refuse and suggest consulting a licensed doctor.',
-    'If uncertain, say what extra data is needed.',
-    'Never provide dangerous, illegal, or harmful instructions.'
-  ].join(' ')
-
-  const contextPayload = {
-    pharmacyProfile: {
-      name: pharmacyProfile?.name,
-      status: pharmacyProfile?.status,
-      deliveryCharge: pharmacyProfile?.deliveryCharge
-    },
-    inventory: inventory.slice(0, 200),
-    orders: orders.slice(0, 200)
-  }
-
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    { role: 'system', content: `Context JSON: ${JSON.stringify(contextPayload)}` },
-    ...safeHistory.map((item) => ({
-      role: item.from === 'assistant' ? 'assistant' : 'user',
-      content: item.text
-    })),
-    { role: 'user', content: question }
-  ]
-
-  const response = await fetch(baseUrl, {
+async function requestPharmacyChatToken(sessionToken) {
+  const response = await fetch(`${chatServiceUrl}/api/chat/auth/pharmacy`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({ model, messages, temperature: 0.3 })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionToken })
   })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok || !data.token) throw new Error(data.message || 'Could not authenticate with live chat.')
+  return data.token
+}
 
-  if (!response.ok) {
-    const raw = await response.text()
-    throw new Error(`AI request failed: ${response.status} ${raw}`)
-  }
-  const json = await response.json()
-  return json?.choices?.[0]?.message?.content?.trim() || 'I could not generate a response. Please try again.'
+function disconnectPharmacyChat() {
+  if (chatTokenRefreshTimer) clearInterval(chatTokenRefreshTimer)
+  chatTokenRefreshTimer = null
+  chatSocket?.removeAllListeners()
+  chatSocket?.disconnect()
+  chatSocket = null
+  chatSessionToken = ''
+}
+
+async function connectPharmacyChat(sessionToken) {
+  const normalizedToken = String(sessionToken || '').trim()
+  if (!normalizedToken) throw new Error('Your pharmacy session is missing. Sign in again.')
+  if (chatSocket?.connected && chatSessionToken === normalizedToken) return { connected: true, serviceUrl: chatServiceUrl }
+
+  disconnectPharmacyChat()
+  chatSessionToken = normalizedToken
+  const token = await requestPharmacyChatToken(normalizedToken)
+  const socket = io(chatServiceUrl, {
+    auth: { token },
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionAttempts: 20
+  })
+  chatSocket = socket
+
+  socket.on('connect', () => broadcastChatEvent('connection', { state: 'connected' }))
+  socket.on('disconnect', () => broadcastChatEvent('connection', { state: 'reconnecting' }))
+  socket.on('connect_error', (error) => broadcastChatEvent('connection', { state: 'offline', error: error.message }))
+  socket.on('message:new', (data) => broadcastChatEvent('message:new', data))
+  socket.on('conversation:updated', (data) => broadcastChatEvent('conversation:updated', data))
+
+  chatTokenRefreshTimer = setInterval(async () => {
+    try {
+      const refreshedToken = await requestPharmacyChatToken(chatSessionToken)
+      if (chatSocket) chatSocket.auth = { token: refreshedToken }
+    } catch (error) {
+      broadcastChatEvent('connection', { state: 'offline', error: error.message })
+    }
+  }, 12 * 60 * 1000)
+
+  if (socket.connected) return { connected: true, serviceUrl: chatServiceUrl }
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Live chat connection timed out.')), 12_000)
+    socket.once('connect', () => {
+      clearTimeout(timeout)
+      resolve({ connected: true, serviceUrl: chatServiceUrl })
+    })
+    socket.once('connect_error', (error) => {
+      clearTimeout(timeout)
+      reject(error)
+    })
+  })
+}
+
+function emitChatEvent(event, payload = {}) {
+  if (!chatSocket?.connected) return Promise.reject(new Error('Live chat is offline. Reconnect and try again.'))
+  return new Promise((resolve, reject) => {
+    chatSocket.timeout(12_000).emit(event, payload, (timeoutError, response) => {
+      if (timeoutError) return reject(new Error('The chat service did not respond.'))
+      if (!response?.ok) return reject(Object.assign(new Error(response?.error || 'Chat request failed.'), { code: response?.code }))
+      return resolve(response.data)
+    })
+  })
 }
 
 function createWindow() {
@@ -197,6 +215,7 @@ app.whenReady().then(() => {
   ipcMain.handle('auth:logout', async (_event, payload) => {
     try {
       const data = await logoutUser(payload || {})
+      disconnectPharmacyChat()
       return { ok: true, data }
     } catch (error) {
       return { ok: false, error: error.message }
@@ -347,48 +366,25 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('chat:ask', async (_event, payload) => {
-    const startedAt = Date.now()
+  ipcMain.handle('chat:connect', async (_event, payload) => {
     try {
-      const question = payload?.question || ''
-      if (/suicide|self harm|bomb|weapon|kill|poison/i.test(question)) {
-        const blocked = 'I cannot help with harmful requests. I can help with pharmacy operations, order management, inventory, and customer support.'
-        await logChatAi(payload.ownerId, {
-          threadId: payload.threadId || '',
-          question,
-          response: blocked,
-          blocked: true,
-          latencyMs: Date.now() - startedAt
-        })
-        return { ok: true, data: { reply: blocked } }
-      }
-
-      const data = await generateChatReply(payload)
-      await logChatAi(payload.ownerId, {
-        threadId: payload.threadId || '',
-        question,
-        response: data,
-        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-        latencyMs: Date.now() - startedAt,
-        blocked: false
-      })
-      return { ok: true, data: { reply: data } }
+      return { ok: true, data: await connectPharmacyChat(payload?.sessionToken) }
     } catch (error) {
-      await logChatAi(payload.ownerId, {
-        threadId: payload.threadId || '',
-        question: payload?.question || '',
-        error: error.message,
-        latencyMs: Date.now() - startedAt,
-        blocked: false
-      })
       return { ok: false, error: error.message }
     }
   })
 
-  ipcMain.handle('chat:sync-threads', async (_event, payload) => {
+  ipcMain.handle('chat:list-conversations', async () => {
     try {
-      const data = await syncChatThreadsFromOrders(payload.ownerId)
-      return { ok: true, data }
+      return { ok: true, data: await emitChatEvent('conversation:list') }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('chat:join', async (_event, payload) => {
+    try {
+      return { ok: true, data: await emitChatEvent('conversation:join', { conversationId: payload?.conversationId }) }
     } catch (error) {
       return { ok: false, error: error.message }
     }
@@ -396,8 +392,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('chat:list-messages', async (_event, payload) => {
     try {
-      const data = await listChatMessages(payload.ownerId, payload.threadId)
-      return { ok: true, data }
+      return { ok: true, data: await emitChatEvent('message:history', { conversationId: payload?.conversationId, before: payload?.before, limit: payload?.limit || 50 }) }
     } catch (error) {
       return { ok: false, error: error.message }
     }
@@ -405,17 +400,20 @@ app.whenReady().then(() => {
 
   ipcMain.handle('chat:send-message', async (_event, payload) => {
     try {
-      const data = await createChatMessage(payload.ownerId, payload.threadId, payload.message)
+      const data = await emitChatEvent('message:send', {
+        conversationId: payload?.conversationId,
+        text: payload?.text,
+        clientMessageId: randomUUID()
+      })
       return { ok: true, data }
     } catch (error) {
       return { ok: false, error: error.message }
     }
   })
 
-  ipcMain.handle('chat:logs', async (_event, payload) => {
+  ipcMain.handle('chat:mark-read', async (_event, payload) => {
     try {
-      const data = await listChatAiLogs(payload.ownerId, payload.limit || 30)
-      return { ok: true, data }
+      return { ok: true, data: await emitChatEvent('message:read', { conversationId: payload?.conversationId }) }
     } catch (error) {
       return { ok: false, error: error.message }
     }
@@ -429,5 +427,6 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  disconnectPharmacyChat()
   if (process.platform !== 'darwin') app.quit()
 })

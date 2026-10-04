@@ -131,6 +131,13 @@ export async function createCommerceOrder({
       }
 
       const pharmacyIds = [...new Set(requestedItems.map((item) => item.pharmacyId))];
+      if (pharmacyIds.length !== 1) {
+        throw new CommerceError(
+          "Checkout one pharmacy cart at a time. Products from other pharmacies stay in their own carts.",
+          400,
+          "MULTIPLE_PHARMACY_CARTS",
+        );
+      }
       const pharmacyObjectIds = pharmacyIds.map((id) => new mongoose.Types.ObjectId(id));
       const pharmacyUsers = await pharmacyDb.collection("users").find({
         _id: { $in: pharmacyObjectIds },
@@ -271,6 +278,9 @@ export async function createCommerceOrder({
         userId: customer?._id || null,
         guestSessionHash: customer ? "" : guestSessionHash,
         orderId,
+        pharmacyId: fulfillments[0].pharmacyId,
+        pharmacyName: fulfillments[0].pharmacyName,
+        pharmacyOrderId: fulfillments[0].pharmacyOrderId,
         items: pharmacyOrders.flatMap((order) => order.items.map((item) => ({
           productId: item.productId,
           pharmacyId: order.ownerId,
@@ -310,7 +320,10 @@ export async function createCommerceOrder({
         updatedAt: now,
       })), { session });
       if (customer) {
-        const customerUpdate = { $set: { cartItems: [], updatedAt: now } };
+        const customerUpdate = {
+          $set: { updatedAt: now },
+          $pull: { cartItems: { pharmacyId: pharmacyIds[0] } },
+        };
         if (shouldSaveAddress) customerUpdate.$push = { addresses: deliveryAddress };
         await marketplaceDb.collection("users").updateOne(
           { _id: customer._id },

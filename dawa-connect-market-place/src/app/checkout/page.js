@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, CreditCard, Banknote, MapPin, Info, ChevronRight, Loader2, LocateFixed } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
@@ -23,10 +23,16 @@ const emptyManualAddress = {
 const addressInputClass =
   "w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
-export default function Checkout() {
+function CheckoutContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading: authLoading, checkUserLoggedIn } = useAuth();
-  const { items, totalItems, clearCart } = useCart();
+  const { pharmacyCarts, isReady: cartReady, clearPharmacyCart } = useCart();
+  const requestedPharmacyId = searchParams.get("pharmacyId") || "";
+  const selectedCart = pharmacyCarts.find((cart) => cart.pharmacyId === requestedPharmacyId)
+    || (!requestedPharmacyId && pharmacyCarts.length === 1 ? pharmacyCarts[0] : null);
+  const checkoutItems = selectedCart?.items || [];
+  const checkoutItemCount = selectedCart?.itemCount || 0;
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState("");
   const [addressMode, setAddressMode] = useState("manual");
@@ -73,22 +79,10 @@ export default function Checkout() {
     }));
   }, [user]);
 
-  const subtotal = useMemo(
-    () => items.reduce((sum, item) => sum + item.price * item.quantity, 0),
-    [items]
-  );
-  const tax = useMemo(
-    () => items.reduce((sum, item) => sum + (item.price * item.quantity * (Number(item.taxRate) || 0)) / 100, 0),
-    [items]
-  );
-  const processingFee = subtotal > 0 ? 100 : 0;
-  const deliveryFee = useMemo(() => {
-    const fees = new Map();
-    for (const item of items) {
-      if (!fees.has(item.pharmacyId)) fees.set(item.pharmacyId, Number(item.deliveryCharge) || 0);
-    }
-    return [...fees.values()].reduce((sum, fee) => sum + fee, 0);
-  }, [items]);
+  const subtotal = selectedCart?.subtotal || 0;
+  const tax = selectedCart?.tax || 0;
+  const processingFee = selectedCart?.processingFee || 0;
+  const deliveryFee = selectedCart?.deliveryFee || 0;
   const total = subtotal + tax + processingFee + deliveryFee;
   const selectedAddress = addresses.find((address) => String(address._id) === String(selectedAddressId));
   const usingSavedAddress = Boolean(user && addressMode === "saved");
@@ -145,7 +139,7 @@ export default function Checkout() {
 
   const handlePlaceOrder = async () => {
     setCheckoutError("");
-    if (!checkoutAddress || (!usingSavedAddress && !manualAddressValid) || items.length === 0) {
+    if (!selectedCart || !checkoutAddress || (!usingSavedAddress && !manualAddressValid) || checkoutItems.length === 0) {
       setCheckoutError("Please complete the required delivery address fields.");
       return;
     }
@@ -155,7 +149,7 @@ export default function Checkout() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: items.map((item) => ({
+          items: checkoutItems.map((item) => ({
             productId: item.productId || item.id,
             pharmacyId: item.pharmacyId,
             quantity: item.quantity,
@@ -169,7 +163,7 @@ export default function Checkout() {
 
       if (response.ok) {
         const data = await response.json();
-        clearCart();
+        clearPharmacyCart(selectedCart.pharmacyId);
         if (user && !usingSavedAddress && saveAddress) {
           await checkUserLoggedIn();
         }
@@ -184,6 +178,22 @@ export default function Checkout() {
       setPlacingOrder(false);
     }
   };
+
+  if (!cartReady) {
+    return <div className="mx-auto max-w-4xl px-4 py-20 text-center text-gray-500">Loading your pharmacy cart…</div>;
+  }
+
+  if (!selectedCart) {
+    return (
+      <div className="mx-auto max-w-xl px-4 py-20 text-center">
+        <div className="rounded-3xl border border-gray-200 bg-white p-10 shadow-sm">
+          <h1 className="text-2xl font-bold text-gray-950">Choose a pharmacy cart</h1>
+          <p className="mt-3 text-sm leading-6 text-gray-600">Each pharmacy is checked out as a separate order. Return to your carts and select the pharmacy you want to order from.</p>
+          <Link href="/cart" className="mt-6 inline-flex rounded-xl bg-blue-800 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-900">View all carts</Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -377,10 +387,10 @@ export default function Checkout() {
             </div>
 
             <div className="space-y-4">
-              {items.length === 0 ? (
+              {checkoutItems.length === 0 ? (
                 <div className="text-gray-500 text-sm">No items in cart.</div>
               ) : (
-                items.map((item) => (
+                checkoutItems.map((item) => (
                   <div key={item.cartItemId} className="flex items-center gap-4">
                     <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center shrink-0 text-2xl">
                       {item.image || "💊"}
@@ -419,7 +429,7 @@ export default function Checkout() {
 
             <div className="space-y-4 mb-6 text-sm">
               <div className="flex justify-between items-center text-gray-600">
-                <span>Subtotal ({totalItems} items)</span>
+                <span>Subtotal ({checkoutItemCount} items)</span>
                 <span>{formatPKR(subtotal)}</span>
               </div>
               <div className="flex justify-between items-center text-gray-600">
@@ -448,7 +458,7 @@ export default function Checkout() {
 
             <button
               onClick={handlePlaceOrder}
-              disabled={placingOrder || authLoading || items.length === 0 || (usingSavedAddress ? !selectedAddress : !manualAddressValid)}
+              disabled={placingOrder || authLoading || checkoutItems.length === 0 || (usingSavedAddress ? !selectedAddress : !manualAddressValid)}
               className="w-full bg-blue-800 text-white font-medium py-3 rounded-lg hover:bg-blue-900 transition-colors flex items-center justify-center gap-2 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {placingOrder ? "Placing Order..." : "Confirm & Place Order"} <ChevronRight className="w-5 h-5" />
@@ -473,4 +483,8 @@ export default function Checkout() {
       </div>
     </div>
   );
+}
+
+export default function Checkout() {
+  return <Suspense fallback={<div className="mx-auto max-w-4xl px-4 py-20 text-center text-gray-500">Preparing checkout…</div>}><CheckoutContent /></Suspense>;
 }

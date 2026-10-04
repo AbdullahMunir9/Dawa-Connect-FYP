@@ -101,21 +101,25 @@ test("Google signup returns to the page that requested authentication", async ({
 
 test("email signup requires OTP verification and then returns to the requesting page", async ({ page }) => {
   let authenticated = false;
+  let signupPayload;
   await page.route("**/api/auth/me", (route) => route.fulfill({
     status: authenticated ? 200 : 401,
     contentType: "application/json",
     body: JSON.stringify(authenticated ? { user } : { message: "Not authenticated" }),
   }));
-  await page.route(/\/api\/auth\/signup$/, (route) => route.fulfill({
-    status: 202,
-    contentType: "application/json",
-    body: JSON.stringify({
-      challengeId: "test-challenge-id-that-is-long-enough-123456",
-      maskedEmail: "te******@example.com",
-      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
-      resendAvailableAt: new Date(Date.now() + 60_000).toISOString(),
-    }),
-  }));
+  await page.route(/\/api\/auth\/signup$/, (route) => {
+    signupPayload = route.request().postDataJSON();
+    return route.fulfill({
+      status: 202,
+      contentType: "application/json",
+      body: JSON.stringify({
+        challengeId: "test-challenge-id-that-is-long-enough-123456",
+        maskedEmail: "te******@example.com",
+        expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+        resendAvailableAt: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    });
+  });
   await page.route("**/api/auth/signup/verify", (route) => {
     authenticated = true;
     return route.fulfill({
@@ -131,14 +135,15 @@ test("email signup requires OTP verification and then returns to the requesting 
   }));
 
   await page.goto("/signup?next=%2Fassistant");
+  await expect(page.locator("#signup-phone")).toHaveCount(0);
+  await expect(page.locator("#signup-city")).toHaveCount(0);
   await page.locator("#signup-name").fill("Test User");
   await page.locator("#signup-email").fill("test@example.com");
-  await page.locator("#signup-phone").fill("+92 300 1234567");
-  await page.locator("#signup-city").fill("Lahore");
   await page.locator("#signup-password").fill("Password1!");
   await page.getByRole("button", { name: "Continue with email" }).click();
 
   await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
+  expect(signupPayload).toEqual({ name: "Test User", email: "test@example.com", password: "Password1!" });
   await expect(page.getByText(/Code expires in (5:00|4:5\d)/)).toBeVisible();
   await page.locator("#signup-otp").fill("123456");
   await page.getByRole("button", { name: "Verify and create account" }).click();

@@ -183,7 +183,7 @@ export default function Home() {
           </div>
 
           <dl className="mt-10 grid max-w-2xl grid-cols-3 gap-3 sm:gap-4">
-            {[[ShieldCheck, "Verified", "Every pharmacy is licence-checked and approved"], [Clock3, "Real-time", "Stock and prices come straight from the pharmacy"], [Truck, "One checkout", "Multiple pharmacies, a single order"]].map(([Icon, title, text]) => (
+            {[[ShieldCheck, "Verified", "Every pharmacy is licence-checked and approved"], [Clock3, "Real-time", "Stock and prices come straight from the pharmacy"], [Truck, "Clear checkout", "A separate cart and order for every pharmacy"]].map(([Icon, title, text]) => (
               <div key={title} className="rounded-2xl bg-white/[0.07] p-3 ring-1 ring-white/10 backdrop-blur sm:p-4">
                 <dt className="flex items-center gap-2 text-sm font-semibold"><Icon className="h-4 w-4 text-teal-200" />{title}</dt>
                 <dd className="mt-1 hidden text-xs leading-5 text-blue-100/80 sm:block">{text}</dd>
