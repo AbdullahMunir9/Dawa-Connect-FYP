@@ -1,13 +1,12 @@
 import 'dotenv/config'
-import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, dialog, safeStorage } from 'electron'
+import { readFile, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { randomUUID } from 'crypto'
 import { io } from 'socket.io-client'
 import { configureLocationPermissions, isLocationRequester } from './locationPermissions.mjs'
-import { createLocationService } from './locationSearch.mjs'
 import {
-  initDatabase,
   registerUser,
   checkRegistrationAvailability,
   loginUser,
@@ -28,15 +27,47 @@ import {
   listComplaints,
   createComplaint,
   replyComplaint,
-  updateComplaintStatus
-} from './db.js'
+  updateComplaintStatus,
+  locationAvailable,
+  searchPharmacyLocation,
+  confirmPharmacyLocation,
+  getSessionToken,
+  pharmacyApiOrigin
+} from './api.js'
 
 const isDev = !app.isPackaged
-const locationService = createLocationService()
-const chatServiceUrl = String(process.env.CHAT_SERVICE_URL || 'http://localhost:5000').replace(/\/$/, '')
+const chatServiceUrl = pharmacyApiOrigin
 let chatSocket = null
 let chatSessionToken = ''
 let chatTokenRefreshTimer = null
+
+function sessionFilePath() {
+  return join(app.getPath('userData'), 'pharmacy-session.bin')
+}
+
+async function savePharmacySession(token) {
+  if (!safeStorage.isEncryptionAvailable()) return
+  await writeFile(sessionFilePath(), safeStorage.encryptString(String(token || '')))
+}
+
+async function loadPharmacySession() {
+  if (!safeStorage.isEncryptionAvailable()) return ''
+  try {
+    return safeStorage.decryptString(await readFile(sessionFilePath()))
+  } catch {
+    return ''
+  }
+}
+
+async function clearPharmacySession() {
+  await unlink(sessionFilePath()).catch(() => {})
+}
+
+function withoutSessionToken(user) {
+  if (!user || typeof user !== 'object') return user
+  const { sessionToken: _sessionToken, ...view } = user
+  return view
+}
 
 function broadcastChatEvent(type, data) {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -145,7 +176,7 @@ function createWindow() {
     : pathToFileURL(join(__dirname, '../renderer/index.html')).href
   configureLocationPermissions(mainWindow, dialog, rendererUrl)
   // Return readiness only; never send the API key to the renderer.
-  mainWindow.webContents.ipc.handle('location:available', () => Boolean(process.env.GEOAPIFY_API_KEY?.trim()))
+  mainWindow.webContents.ipc.handle('location:available', async () => locationAvailable().catch(() => false))
   for (const action of ['search', 'confirm']) {
     mainWindow.webContents.ipc.handle(`location:${action}`, async (event, payload) => {
       try {
@@ -153,16 +184,15 @@ function createWindow() {
           isMainFrame: event.senderFrame === mainWindow.webContents.mainFrame,
           requestingUrl: event.senderFrame?.url
         }, rendererUrl)) throw new Error('Location requests must come from the main application page.')
-        const data = await locationService[action](event.sender.id, payload)
+        const data = action === 'search'
+          ? await searchPharmacyLocation(payload)
+          : await confirmPharmacyLocation(payload)
         return { ok: true, data }
       } catch (error) {
         return { ok: false, error: error.message }
       }
     })
   }
-  const contentsId = mainWindow.webContents.id
-  mainWindow.on('closed', () => locationService.clear(contentsId))
-
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -171,14 +201,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  initDatabase().catch((error) => {
-    console.error('MongoDB init failed:', error.message)
-  })
-
-  ipcMain.handle('auth:register', async (event, payload) => {
+  ipcMain.handle('auth:register', async (_event, payload) => {
     try {
-      const user = await registerUser(locationService.registrationPayload(event.sender.id, payload))
-      locationService.clear(event.sender.id)
+      const user = await registerUser(payload)
       return { ok: true, data: user }
     } catch (error) {
       return { ok: false, error: error.message }
@@ -197,27 +222,33 @@ app.whenReady().then(() => {
   ipcMain.handle('auth:login', async (_event, payload) => {
     try {
       const user = await loginUser(payload)
-      return { ok: true, data: user }
+      await savePharmacySession(user.sessionToken)
+      return { ok: true, data: withoutSessionToken(user) }
     } catch (error) {
       return { ok: false, error: error.message }
     }
   })
 
-  ipcMain.handle('auth:restore', async (_event, payload) => {
+  ipcMain.handle('auth:restore', async () => {
     try {
-      const user = await restoreUserSession(payload || {})
-      return { ok: true, data: user }
+      const sessionToken = await loadPharmacySession()
+      if (!sessionToken) throw new Error('No saved pharmacy session.')
+      const user = await restoreUserSession({ sessionToken })
+      return { ok: true, data: withoutSessionToken(user) }
     } catch (error) {
+      await clearPharmacySession()
       return { ok: false, error: error.message }
     }
   })
 
-  ipcMain.handle('auth:logout', async (_event, payload) => {
+  ipcMain.handle('auth:logout', async () => {
     try {
-      const data = await logoutUser(payload || {})
+      const data = await logoutUser()
       disconnectPharmacyChat()
+      await clearPharmacySession()
       return { ok: true, data }
     } catch (error) {
+      await clearPharmacySession()
       return { ok: false, error: error.message }
     }
   })
@@ -368,7 +399,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('chat:connect', async (_event, payload) => {
     try {
-      return { ok: true, data: await connectPharmacyChat(payload?.sessionToken) }
+      return { ok: true, data: await connectPharmacyChat(payload?.sessionToken || getSessionToken()) }
     } catch (error) {
       return { ok: false, error: error.message }
     }

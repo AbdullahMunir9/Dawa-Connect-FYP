@@ -17,10 +17,7 @@ const formatRelativeTime = (value) => {
 }
 
 export const AppProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    const raw = localStorage.getItem('sessionUser')
-    return raw ? JSON.parse(raw) : null
-  })
+  const [user, setUser] = useState(null)
   const [inventory, setInventory] = useState([])
   const [orders, setOrders] = useState([])
   const [staff, setStaff] = useState([])
@@ -29,7 +26,7 @@ export const AppProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([])
   const [complaints, setComplaints] = useState({ inbox: [], outbox: [] })
   const [toasts, setToasts] = useState([])
-  const [authLoading, setAuthLoading] = useState(false)
+  const [authLoading, setAuthLoading] = useState(true)
   const [pharmacyProfile, setPharmacyProfileState] = useState({
     name: 'My Pharmacy',
     address: '',
@@ -119,13 +116,12 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     let active = true
     const restoreSession = async () => {
-      const raw = localStorage.getItem('sessionUser')
-      if (!raw || !window.electronAPI?.auth?.restore) return
+      if (!window.electronAPI?.auth?.restore) {
+        if (active) setAuthLoading(false)
+        return
+      }
       try {
-        const cached = JSON.parse(raw)
-        if (!cached?.sessionToken) return
-        setAuthLoading(true)
-        const result = await window.electronAPI.auth.restore({ sessionToken: cached.sessionToken })
+        const result = await window.electronAPI.auth.restore()
         if (!active) return
         if (result.ok) {
           setUser(result.data)
@@ -225,13 +221,7 @@ export const AppProvider = ({ children }) => {
   }
 
   const logout = () => {
-    const currentUser = user
-    if (currentUser?.sessionToken || currentUser?.id) {
-      window.electronAPI.auth.logout({
-        sessionToken: currentUser.sessionToken,
-        userId: currentUser.id
-      }).catch(() => {})
-    }
+    if (user?.id) window.electronAPI.auth.logout().catch(() => {})
     setUser(null)
     setInventory([])
     setOrders([])

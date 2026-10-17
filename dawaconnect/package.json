@@ -5,12 +5,9 @@
   "main": "out/main/main.js",
   "private": true,
   "dependencies": {
-    "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.294.0",
-    "mongodb": "^6.8.0",
-    "nodemailer": "^10.0.13",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-leaflet": "^4.2.1",

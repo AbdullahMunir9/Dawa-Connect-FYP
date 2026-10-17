@@ -9,6 +9,7 @@ import userRoutes from './routes/userRoutes.js';
 import complaintRoutes from './routes/complaintRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
 import createChatRouter from './routes/chatRoutes.js';
+import pharmacyRoutes from './routes/pharmacyRoutes.js';
 import pharmacyDb from './db/pharmacyConnection.js';
 import { configureChatSocket } from './sockets/chatSocket.js';
 
@@ -74,6 +75,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/chat', createChatRouter());
+app.use('/api/pharmacy', pharmacyRoutes);
 
 app.use((_req, res) => res.status(404).json({ message: 'Not found' }));
 app.use((error, _req, res, _next) => {
