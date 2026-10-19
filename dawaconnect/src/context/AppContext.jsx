@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 
 const AppContext = createContext()
 export const useApp = () => useContext(AppContext)
@@ -27,6 +27,8 @@ export const AppProvider = ({ children }) => {
   const [complaints, setComplaints] = useState({ inbox: [], outbox: [] })
   const [toasts, setToasts] = useState([])
   const [authLoading, setAuthLoading] = useState(true)
+  const notificationIdsRef = useRef(new Set())
+  const notificationsReadyRef = useRef(false)
   const [pharmacyProfile, setPharmacyProfileState] = useState({
     name: 'My Pharmacy',
     address: '',
@@ -51,12 +53,29 @@ export const AppProvider = ({ children }) => {
     setTimeout(() => setToasts((p) => p.filter((t) => t.id !== id)), 3500)
   }, [])
 
+  const syncNotifications = useCallback((rows) => {
+    const mapped = rows.map((notification) => ({
+      ...mapDoc(notification),
+      time: formatRelativeTime(notification.createdAt)
+    }))
+    const newOrderNotifications = notificationsReadyRef.current
+      ? mapped.filter((notification) => notification.type === 'order' && !notificationIdsRef.current.has(String(notification.id)))
+      : []
+    notificationIdsRef.current = new Set(mapped.map((notification) => String(notification.id)))
+    notificationsReadyRef.current = true
+    setNotifications(mapped)
+    for (const notification of newOrderNotifications) {
+      showToast(notification.message || 'A new order was received.', 'warning')
+      void window.electronAPI.notifications?.show(notification)
+    }
+  }, [showToast])
+
   const fetchEntity = async (entity, ownerId, setter) => {
     const result = await window.electronAPI.entity.list({ entity, ownerId, sort: { createdAt: -1 } })
     if (result.ok) {
       const rows = result.data.map(mapDoc)
       if (entity === 'notifications') {
-        setter(rows.map((n) => ({ ...n, time: formatRelativeTime(n.createdAt) })))
+        syncNotifications(rows)
       } else {
         setter(rows)
       }
@@ -111,7 +130,7 @@ export const AppProvider = ({ children }) => {
         return changed ? next : u
       })
     }
-  }, [])
+  }, [syncNotifications])
 
   useEffect(() => {
     let active = true
@@ -185,6 +204,26 @@ export const AppProvider = ({ children }) => {
     return () => clearInterval(interval)
   }, [user?.id])
 
+  useEffect(() => {
+    if (!user?.id || !window.electronAPI?.notifications?.onEvent) return undefined
+    const ownerKey = String(user.id)
+    return window.electronAPI.notifications.onEvent(({ type, data }) => {
+      if (!['new', 'sync'].includes(type)) return
+      if (type === 'new') {
+        if (data?.id) notificationIdsRef.current.add(String(data.id))
+        showToast(data?.message || 'A new order was received.', 'warning')
+      }
+      void Promise.all([
+        fetchEntity('orders', ownerKey, setOrders),
+        fetchEntity('notifications', ownerKey, setNotifications)
+      ])
+    })
+  }, [user?.id, syncNotifications, showToast])
+
+  useEffect(() => {
+    void window.electronAPI?.notifications?.setUnreadCount(notifications.filter((item) => !item.read).length)
+  }, [notifications])
+
   const login = async (email, password) => {
     setAuthLoading(true)
     try {
@@ -233,6 +272,8 @@ export const AppProvider = ({ children }) => {
   const logout = () => {
     if (user?.id) window.electronAPI.auth.logout().catch(() => {})
     setUser(null)
+    notificationIdsRef.current = new Set()
+    notificationsReadyRef.current = false
     setInventory([])
     setOrders([])
     setStaff([])

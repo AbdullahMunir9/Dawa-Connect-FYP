@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { app, BrowserWindow, shell, ipcMain, dialog, safeStorage } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, dialog, safeStorage, Menu, nativeImage, Notification, Tray } from 'electron'
 import { readFile, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
@@ -46,6 +46,134 @@ let chatSocket = null
 let chatSessionToken = ''
 let chatTokenRefreshTimer = null
 const registrationPhotoSelections = new Map()
+let mainWindow = null
+let tray = null
+let isQuitting = false
+let trayUnreadCount = 0
+const DEFAULT_NOTIFICATION_PREFERENCES = {
+  desktopEnabled: true,
+  soundEnabled: true,
+  runInBackground: true,
+  startWithWindows: false
+}
+let notificationPreferences = { ...DEFAULT_NOTIFICATION_PREFERENCES }
+let notifiedIds = new Set()
+const TRAY_ICON_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAIGSURBVFhH1VchT8NAFK4krM2QSH4CEonHIJGTSCQOFHfDLOya1BXJ3MwSkhnmmCBBkiBgDsWQyHLv+mh3vdfebW1J+JLP7L27973Xu/d23r9FcMMPOoIdrhJN7WA7vN71xdWpL/h9EPKkjH7IHv0hP+9GbA+X1kN3MNgJBLsMBP+mAloYgXDcan1AWf2QfxEbu1MK7wh+glu6IwhZb8Osacoq4tZ2qODUJjXph/0BhigHlL3RzAuEg4yhTKiTXveb2yiTk3H2MaQOKBG5KOMkmSUVWM6TI3KdwTGGzAHZ20tvEaDwmcQjaq1OowrQPChHnbmA2bRgG82TBdocKxFh6BTQwQinAisEAKevaHWogmAfGBq7HeVk0CJgxb54igm7zuwzwGChHEzaBMRJvEztLgKyDukP+8eUg8lmBchDf5YKkM2BdDDY7CfI2jOUgnQwaBGQ3QS3qwg3DwXI9ks4mKwSkNvcGxLrKQGqCZEORa4EKYVb9ory8CsBADkD3kknjRYBbxNiTQll1/VuL7YwPAiwzYHGqc8DaAqEU2uEq4+hc0jDuOjYCgV/xpA6/qoKZPa/cJuKtahPQQryft4RC2sTJq528kshnZoWAcFh6mIEN6gHCbHZBozcMieAbfqhsKErXyoP3DpIR7b8LA5/2dP3I/b5NqCebHBb1JsxJ/y+Xqk97weBXqyB5fsk2gAAAABJRU5ErkJggg=='
+
+function notificationStateFilePath() {
+  return join(app.getPath('userData'), 'notification-settings.json')
+}
+
+async function loadNotificationState() {
+  try {
+    const parsed = JSON.parse(await readFile(notificationStateFilePath(), 'utf8'))
+    notificationPreferences = { ...DEFAULT_NOTIFICATION_PREFERENCES, ...(parsed.preferences || {}) }
+    notifiedIds = new Set(Array.isArray(parsed.notifiedIds) ? parsed.notifiedIds.slice(-300) : [])
+  } catch {
+    notificationPreferences = { ...DEFAULT_NOTIFICATION_PREFERENCES }
+    notifiedIds = new Set()
+  }
+}
+
+async function saveNotificationState() {
+  const state = {
+    preferences: notificationPreferences,
+    notifiedIds: [...notifiedIds].slice(-300)
+  }
+  await writeFile(notificationStateFilePath(), JSON.stringify(state, null, 2), 'utf8')
+}
+
+function broadcastNotificationEvent(type, data) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send('notification:event', { type, data })
+  }
+}
+
+function showMainWindow(target = {}) {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow()
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+  if (target.page) mainWindow.webContents.send('notification:navigate', target)
+}
+
+function updateTrayMenu() {
+  if (!tray) return
+  tray.setToolTip(trayUnreadCount > 0 ? `DawaConnect — ${trayUnreadCount} unread` : 'DawaConnect Pharmacy')
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Open DawaConnect', click: () => showMainWindow() },
+    { label: trayUnreadCount > 0 ? `Open orders (${trayUnreadCount} unread)` : 'Open orders', click: () => showMainWindow({ page: 'orders' }) },
+    { type: 'separator' },
+    { label: 'Desktop notifications', type: 'checkbox', checked: notificationPreferences.desktopEnabled, click: (item) => void updateNotificationPreferences({ desktopEnabled: item.checked }) },
+    { type: 'separator' },
+    { label: 'Quit DawaConnect', click: () => { isQuitting = true; app.quit() } }
+  ]))
+}
+
+function createTray() {
+  if (tray || !notificationPreferences.runInBackground) return
+  const image = nativeImage.createFromDataURL(TRAY_ICON_DATA_URL)
+  tray = new Tray(image)
+  tray.on('double-click', () => showMainWindow())
+  updateTrayMenu()
+}
+
+function destroyTray() {
+  tray?.destroy()
+  tray = null
+}
+
+async function updateNotificationPreferences(changes = {}) {
+  const allowed = ['desktopEnabled', 'soundEnabled', 'runInBackground', 'startWithWindows']
+  notificationPreferences = {
+    ...notificationPreferences,
+    ...Object.fromEntries(allowed.filter((key) => Object.hasOwn(changes, key)).map((key) => [key, Boolean(changes[key])]))
+  }
+  if (process.platform === 'win32' && app.isPackaged) app.setLoginItemSettings({ openAtLogin: notificationPreferences.startWithWindows })
+  if (notificationPreferences.runInBackground) createTray(); else destroyTray()
+  updateTrayMenu()
+  await saveNotificationState()
+  return { ...notificationPreferences, supported: Notification.isSupported() }
+}
+
+function nativeNotificationBody(data) {
+  return String(data?.message || (data?.orderId ? `Order ${data.orderId} needs your attention.` : 'You have a new pharmacy notification.')).slice(0, 220)
+}
+
+async function markNotificationsDelivered(ids) {
+  for (const id of ids.map(String).filter(Boolean)) notifiedIds.add(id)
+  await saveNotificationState().catch(() => {})
+}
+
+function showNativeNotification(data, count = 1) {
+  if (!notificationPreferences.desktopEnabled || !Notification.isSupported()) return
+  const summary = count > 1
+  const notice = new Notification({
+    title: summary ? `${count} new orders received` : 'New pharmacy order',
+    body: summary ? `Open DawaConnect to review ${count} orders waiting for your pharmacy.` : nativeNotificationBody(data),
+    silent: !notificationPreferences.soundEnabled,
+    urgency: 'critical'
+  })
+  notice.on('click', () => showMainWindow({ page: 'orders', orderId: summary ? '' : String(data?.orderId || '') }))
+  notice.show()
+}
+
+async function handleRealtimeNotification(data) {
+  if (!data?.id) return
+  broadcastNotificationEvent('new', data)
+  if (notifiedIds.has(String(data.id))) return
+  await markNotificationsDelivered([data.id])
+  if (!mainWindow?.isFocused()) showNativeNotification(data)
+}
+
+async function handleNotificationSync(items) {
+  const rows = Array.isArray(items) ? items : []
+  const unseen = rows.filter((item) => item?.id && !notifiedIds.has(String(item.id)))
+  broadcastNotificationEvent('sync', rows)
+  if (!unseen.length) return
+  await markNotificationsDelivered(unseen.map((item) => item.id))
+  if (!mainWindow?.isFocused()) showNativeNotification(unseen.at(-1), unseen.length)
+}
 
 function pharmacyPhotoMime(buffer) {
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg'
@@ -152,6 +280,8 @@ async function connectPharmacyChat(sessionToken) {
   socket.on('connect_error', (error) => broadcastChatEvent('connection', { state: 'offline', error: error.message }))
   socket.on('message:new', (data) => broadcastChatEvent('message:new', data))
   socket.on('conversation:updated', (data) => broadcastChatEvent('conversation:updated', data))
+  socket.on('notification:new', (data) => void handleRealtimeNotification(data))
+  socket.on('notification:sync', (data) => void handleNotificationSync(data))
 
   chatTokenRefreshTimer = setInterval(async () => {
     try {
@@ -188,7 +318,8 @@ function emitChatEvent(event, payload = {}) {
 }
 
 function createWindow() {
-  const mainWindow = new BrowserWindow({
+  if (mainWindow && !mainWindow.isDestroyed()) return mainWindow
+  mainWindow = new BrowserWindow({
     width: 1366,
     height: 820,
     minWidth: 1024,
@@ -198,7 +329,8 @@ function createWindow() {
       preload: join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      backgroundThrottling: false
     }
   })
 
@@ -206,6 +338,15 @@ function createWindow() {
     shell.openExternal(url)
     return { action: 'deny' }
   })
+
+  mainWindow.on('close', (event) => {
+    if (!isQuitting && notificationPreferences.runInBackground) {
+      event.preventDefault()
+      mainWindow.hide()
+    }
+  })
+
+  mainWindow.on('closed', () => { mainWindow = null })
 
   const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
     ? process.env.ELECTRON_RENDERER_URL
@@ -234,9 +375,14 @@ function createWindow() {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+  return mainWindow
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  if (process.platform === 'win32') app.setAppUserModelId('com.dawaconnect.desktop')
+  await loadNotificationState()
+  if (process.platform === 'win32' && app.isPackaged) app.setLoginItemSettings({ openAtLogin: notificationPreferences.startWithWindows })
+  createTray()
   ipcMain.handle('auth:register', async (_event, payload) => {
     try {
       const user = await registerUser(payload)
@@ -320,6 +466,7 @@ app.whenReady().then(() => {
     try {
       const user = await loginUser(payload)
       await savePharmacySession(user.sessionToken)
+      void connectPharmacyChat(user.sessionToken).catch((error) => broadcastChatEvent('connection', { state: 'offline', error: error.message }))
       return { ok: true, data: withoutSessionToken(user) }
     } catch (error) {
       return { ok: false, error: error.message }
@@ -331,6 +478,7 @@ app.whenReady().then(() => {
       const sessionToken = await loadPharmacySession()
       if (!sessionToken) throw new Error('No saved pharmacy session.')
       const user = await restoreUserSession({ sessionToken })
+      void connectPharmacyChat(sessionToken).catch((error) => broadcastChatEvent('connection', { state: 'offline', error: error.message }))
       return { ok: true, data: withoutSessionToken(user) }
     } catch (error) {
       await clearPharmacySession()
@@ -568,14 +716,48 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.handle('notifications:preferences-get', async () => ({
+    ok: true,
+    data: { ...notificationPreferences, supported: Notification.isSupported() }
+  }))
+
+  ipcMain.handle('notifications:preferences-update', async (_event, payload) => {
+    try {
+      return { ok: true, data: await updateNotificationPreferences(payload || {}) }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('notifications:show', async (_event, payload) => {
+    try {
+      await handleRealtimeNotification(payload)
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('notifications:unread-count', async (_event, payload) => {
+    trayUnreadCount = Math.max(0, Number(payload?.count) || 0)
+    updateTrayMenu()
+    return { ok: true }
+  })
+
   createWindow()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    else showMainWindow()
   })
 })
 
 app.on('window-all-closed', () => {
+  if (!notificationPreferences.runInBackground && process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  isQuitting = true
   disconnectPharmacyChat()
-  if (process.platform !== 'darwin') app.quit()
+  destroyTray()
 })

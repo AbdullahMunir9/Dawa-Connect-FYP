@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 
 const STATUS_ORDER = ['Pending', 'Confirmed', 'Packed', 'Dispatched', 'Delivered', 'Cancelled'];
@@ -11,7 +11,7 @@ const NEXT_STATUS = {
   Cancelled: [],
 };
 
-export default function Orders() {
+export default function Orders({ orderNavigation }) {
   const { orders, updateOrderStatus, pharmacyProfile, user } = useApp();
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
@@ -31,6 +31,16 @@ export default function Orders() {
   }), [orders, filter, search]);
 
   const statusColor = { Pending: 'warning', Confirmed: 'info', Packed: 'info', Dispatched: 'teal', Delivered: 'success', Cancelled: 'danger' };
+
+  useEffect(() => {
+    if (!orderNavigation?.nonce || !orderNavigation.orderId) return;
+    const order = orders.find((item) => String(item.id) === String(orderNavigation.orderId));
+    if (order) {
+      setFilter('All');
+      setSearch('');
+      setSelectedOrder(order);
+    }
+  }, [orderNavigation, orders]);
 
   if (isSuspended || isRejected || isUnapproved) {
     return (

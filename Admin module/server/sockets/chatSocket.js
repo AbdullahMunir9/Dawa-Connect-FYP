@@ -7,6 +7,7 @@ import {
   getConversation,
   sendMessage,
 } from '../services/chatService.js';
+import { recentUnreadOrderNotifications } from '../services/pharmacyNotificationStream.js';
 
 const conversationRoom = (id) => `conversation:${id}`;
 const participantRoom = (identity) => `${identity.role}:${identity.sub}`;
@@ -48,6 +49,12 @@ export function configureChatSocket(io) {
   io.on('connection', (socket) => {
     const identity = socket.data.identity;
     socket.join(participantRoom(identity));
+
+    if (identity.role === 'pharmacy') {
+      recentUnreadOrderNotifications(identity.sub)
+        .then((notifications) => socket.emit('notification:sync', notifications))
+        .catch((error) => console.error('Could not sync pharmacy notifications:', error.message));
+    }
 
     socket.on('conversation:list', (ack) => reply(ack, () => listConversations(identity)));
 

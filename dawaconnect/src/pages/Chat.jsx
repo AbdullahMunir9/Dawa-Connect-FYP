@@ -16,7 +16,7 @@ const formatRelative = (value) => {
 }
 
 export default function ChatPage() {
-  const { user, showToast } = useApp()
+  const { showToast } = useApp()
   const [conversations, setConversations] = useState([])
   const [activeId, setActiveId] = useState('')
   const [messages, setMessages] = useState([])
@@ -66,12 +66,7 @@ export default function ChatPage() {
     })
 
     async function connect() {
-      if (!user?.sessionToken) {
-        setError('Your pharmacy session is missing. Sign in again.')
-        setLoading(false)
-        return
-      }
-      const result = await window.electronAPI.chat.connect({ sessionToken: user.sessionToken })
+      const result = await window.electronAPI.chat.connect()
       if (!activeEffect) return
       if (!result.ok) {
         setError(result.error || 'Live chat could not connect.')
@@ -93,7 +88,7 @@ export default function ChatPage() {
       activeEffect = false
       unsubscribe?.()
     }
-  }, [user?.sessionToken, loadConversations])
+  }, [loadConversations])
 
   useEffect(() => {
     let activeEffect = true

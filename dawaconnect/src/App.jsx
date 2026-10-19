@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from './context/AppContext';
 import AuthPage, { RegisterPage } from './pages/AuthPage';
 import OnboardingPage from './pages/OnboardingPage';
@@ -46,6 +46,18 @@ export default function App() {
   const [walkthroughDone, setWalkthroughDone] = useState(() => localStorage.getItem('onboardingDone') === '1');
   const [showRegister, setShowRegister] = useState(false);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [orderNavigation, setOrderNavigation] = useState({ orderId: '', nonce: 0 });
+
+  useEffect(() => {
+    if (!window.electronAPI?.notifications?.onNavigate) return undefined;
+    return window.electronAPI.notifications.onNavigate((target) => {
+      if (target?.page === 'orders') {
+        setPage('orders');
+        setOrderNavigation({ orderId: String(target.orderId || ''), nonce: Date.now() });
+        setShowNotifPanel(false);
+      }
+    });
+  }, []);
   const handleLogout = () => {
     logout();
     setShowRegister(false);
@@ -72,7 +84,7 @@ export default function App() {
   const renderPage = () => {
     switch (page) {
       case 'dashboard': return <Dashboard />;
-      case 'orders': return <Orders />;
+      case 'orders': return <Orders orderNavigation={orderNavigation} />;
       case 'inventory': return <Inventory />;
       case 'analytics': return <Analytics />;
       case 'returns': return <ReturnsPage />;

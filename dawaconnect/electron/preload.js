@@ -40,6 +40,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     pick: (payload) => ipcRenderer.invoke('photos:registration-pick', payload),
     clear: (payload) => ipcRenderer.invoke('photos:registration-clear', payload)
   },
+  notifications: {
+    getPreferences: () => ipcRenderer.invoke('notifications:preferences-get'),
+    updatePreferences: (payload) => ipcRenderer.invoke('notifications:preferences-update', payload),
+    show: (payload) => ipcRenderer.invoke('notifications:show', payload),
+    setUnreadCount: (count) => ipcRenderer.invoke('notifications:unread-count', { count }),
+    onEvent: (callback) => {
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on('notification:event', listener)
+      return () => ipcRenderer.removeListener('notification:event', listener)
+    },
+    onNavigate: (callback) => {
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on('notification:navigate', listener)
+      return () => ipcRenderer.removeListener('notification:navigate', listener)
+    }
+  },
   complaints: {
     list: (payload) => ipcRenderer.invoke('complaints:list', payload),
     create: (payload) => ipcRenderer.invoke('complaints:create', payload),

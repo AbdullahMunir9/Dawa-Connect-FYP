@@ -12,6 +12,7 @@ import createChatRouter from './routes/chatRoutes.js';
 import pharmacyRoutes from './routes/pharmacyRoutes.js';
 import pharmacyDb from './db/pharmacyConnection.js';
 import { configureChatSocket } from './sockets/chatSocket.js';
+import { startPharmacyNotificationStream } from './services/pharmacyNotificationStream.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -53,6 +54,7 @@ const io = new SocketIOServer(httpServer, {
   maxHttpBufferSize: 32 * 1024,
 });
 configureChatSocket(io);
+const stopPharmacyNotificationStream = startPharmacyNotificationStream(io);
 
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, _res, next) => {
@@ -95,3 +97,14 @@ pharmacyDb.on('error', (err) => console.error('Pharmacy MongoDB connection error
 httpServer.listen(PORT, () => {
   console.log(`DawaConnect API and chat service listening on port ${PORT} (allowed origins: ${browserOrigins.join(', ')})`);
 });
+
+async function shutdown(signal) {
+  console.log(`${signal} received; shutting down DawaConnect API.`);
+  await stopPharmacyNotificationStream();
+  io.close();
+  httpServer.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 10_000).unref();
+}
+
+process.once('SIGTERM', () => void shutdown('SIGTERM'));
+process.once('SIGINT', () => void shutdown('SIGINT'));
