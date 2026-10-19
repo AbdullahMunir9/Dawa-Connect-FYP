@@ -39,6 +39,33 @@ async function apiRequest(path, { method = 'GET', body, authenticated = true, ti
   return data;
 }
 
+async function apiPhotoRequest(path, buffer, mimeType, { authenticated = true, registrationToken = '' } = {}) {
+  if (authenticated && !pharmacySessionToken) throw new Error('Your pharmacy session is missing. Sign in again.');
+  let response;
+  try {
+    response = await fetch(endpoint(path), {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': mimeType,
+        ...(authenticated ? { Authorization: `Bearer ${pharmacySessionToken}` } : {}),
+        ...(registrationToken ? { 'x-registration-photo-token': registrationToken } : {}),
+      },
+      body: buffer,
+      signal: AbortSignal.timeout(45_000),
+    });
+  } catch (error) {
+    if (error?.name === 'TimeoutError') throw new Error('The pharmacy photo upload took too long.');
+    throw new Error('Could not upload the pharmacy photo. Check your internet connection.');
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 401 && authenticated) pharmacySessionToken = '';
+    throw Object.assign(new Error(data.message || `Photo upload failed (${response.status}).`), { status: response.status });
+  }
+  return data;
+}
+
 export function getSessionToken() {
   return pharmacySessionToken;
 }
@@ -71,6 +98,22 @@ export async function registerUser(payload) {
   const data = await apiRequest('/pharmacy/auth/register', { method: 'POST', authenticated: false, body: payload });
   locationSessionId = '';
   return data;
+}
+
+export function verifyRegistration(payload) {
+  return apiRequest('/pharmacy/auth/register/verify', { method: 'POST', authenticated: false, body: payload });
+}
+
+export function resendRegistrationOtp(challengeId) {
+  return apiRequest('/pharmacy/auth/register/resend', {
+    method: 'POST', authenticated: false, body: { challengeId },
+  });
+}
+
+export function uploadRegistrationPhoto(slot, buffer, mimeType, registrationToken) {
+  return apiPhotoRequest(`/pharmacy/auth/register/photos/${encodeURIComponent(slot)}`, buffer, mimeType, {
+    authenticated: false, registrationToken,
+  });
 }
 
 export async function loginUser(payload) {
@@ -141,6 +184,14 @@ export function getProfile() {
 
 export function upsertProfile(_ownerId, profile) {
   return apiRequest('/pharmacy/profile', { method: 'PUT', body: profile });
+}
+
+export function uploadProfilePhoto(slot, buffer, mimeType) {
+  return apiPhotoRequest(`/pharmacy/profile/photos/${encodeURIComponent(slot)}`, buffer, mimeType);
+}
+
+export function removeProfilePhoto(slot) {
+  return apiRequest(`/pharmacy/profile/photos/${encodeURIComponent(slot)}`, { method: 'DELETE' });
 }
 
 export function listComplaints() {

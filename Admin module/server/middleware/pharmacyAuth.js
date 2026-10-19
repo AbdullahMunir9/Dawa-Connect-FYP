@@ -14,6 +14,7 @@ export function pharmacyView(user) {
     accountStatus: String(user.status || '').toLowerCase(),
     rejectionReason: user.rejectionReason || '',
     suspensionReason: user.suspensionReason || '',
+    emailVerified: Boolean(user.emailVerifiedAt),
   };
 }
 

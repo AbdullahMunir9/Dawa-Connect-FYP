@@ -8,6 +8,9 @@ import { io } from 'socket.io-client'
 import { configureLocationPermissions, isLocationRequester } from './locationPermissions.mjs'
 import {
   registerUser,
+  verifyRegistration,
+  resendRegistrationOtp,
+  uploadRegistrationPhoto,
   checkRegistrationAvailability,
   loginUser,
   restoreUserSession,
@@ -24,6 +27,8 @@ import {
   removeCollectionItem,
   getProfile,
   upsertProfile,
+  uploadProfilePhoto,
+  removeProfilePhoto,
   listComplaints,
   createComplaint,
   replyComplaint,
@@ -40,6 +45,37 @@ const chatServiceUrl = pharmacyApiOrigin
 let chatSocket = null
 let chatSessionToken = ''
 let chatTokenRefreshTimer = null
+const registrationPhotoSelections = new Map()
+
+function pharmacyPhotoMime(buffer) {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg'
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png'
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString() === 'RIFF' && buffer.subarray(8, 12).toString() === 'WEBP') return 'image/webp'
+  return ''
+}
+
+function validatedPhotoSlot(value) {
+  const slot = String(value || '').toLowerCase()
+  if (!['inside', 'outside'].includes(slot)) throw new Error('Photo type must be inside or outside.')
+  return slot
+}
+
+async function choosePharmacyPhoto() {
+  const options = {
+    title: 'Choose pharmacy photo',
+    properties: ['openFile'],
+    filters: [{ name: 'Photos', extensions: ['jpg', 'jpeg', 'png', 'webp'] }]
+  }
+  const focusedWindow = BrowserWindow.getFocusedWindow()
+  const result = focusedWindow ? await dialog.showOpenDialog(focusedWindow, options) : await dialog.showOpenDialog(options)
+  if (result.canceled || !result.filePaths[0]) return null
+  const filePath = result.filePaths[0]
+  const buffer = await readFile(filePath)
+  if (buffer.length > 5 * 1024 * 1024) throw new Error('Each pharmacy photo must be 5 MB or smaller.')
+  const mimeType = pharmacyPhotoMime(buffer)
+  if (!mimeType) throw new Error('Only JPEG, PNG, and WebP pharmacy photos are supported.')
+  return { filePath, buffer, mimeType, previewUrl: `data:${mimeType};base64,${buffer.toString('base64')}` }
+}
 
 function sessionFilePath() {
   return join(app.getPath('userData'), 'pharmacy-session.bin')
@@ -210,6 +246,67 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.handle('auth:register-verify', async (_event, payload) => {
+    try {
+      const data = await verifyRegistration(payload)
+      const { photoUploadToken, ...safeData } = data
+      const photoUploadErrors = []
+      if (registrationPhotoSelections.size > 0 && !photoUploadToken) {
+        photoUploadErrors.push('The server did not provide a photo upload session.')
+      } else if (photoUploadToken) {
+        for (const [slot, photo] of registrationPhotoSelections.entries()) {
+          try {
+            await uploadRegistrationPhoto(slot, photo.buffer, photo.mimeType, photoUploadToken)
+          } catch (error) {
+            photoUploadErrors.push(`${slot}: ${error.message}`)
+          }
+        }
+      }
+      registrationPhotoSelections.clear()
+      return {
+        ok: true,
+        data: {
+          ...safeData,
+          photoUploadWarning: photoUploadErrors.length
+            ? 'Your account was created, but one or more optional photos could not be uploaded. Add them later from Pharmacy Profile.'
+            : ''
+        }
+      }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('photos:registration-pick', async (_event, payload) => {
+    try {
+      const slot = validatedPhotoSlot(payload?.slot)
+      const photo = await choosePharmacyPhoto()
+      if (!photo) return { ok: true, canceled: true }
+      registrationPhotoSelections.set(slot, photo)
+      return { ok: true, data: { slot, previewUrl: photo.previewUrl, size: photo.buffer.length } }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('photos:registration-clear', async (_event, payload) => {
+    try {
+      registrationPhotoSelections.delete(validatedPhotoSlot(payload?.slot))
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('auth:register-resend', async (_event, payload) => {
+    try {
+      const data = await resendRegistrationOtp(payload?.challengeId)
+      return { ok: true, data }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
   ipcMain.handle('auth:registration-availability', async (_event, payload) => {
     try {
       const data = await checkRegistrationAvailability(payload || {})
@@ -355,6 +452,27 @@ app.whenReady().then(() => {
   ipcMain.handle('profile:save', async (_event, payload) => {
     try {
       const data = await upsertProfile(payload.ownerId, payload.profile)
+      return { ok: true, data }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('profile:photo-upload', async (_event, payload) => {
+    try {
+      const slot = validatedPhotoSlot(payload?.slot)
+      const photo = await choosePharmacyPhoto()
+      if (!photo) return { ok: true, canceled: true }
+      const data = await uploadProfilePhoto(slot, photo.buffer, photo.mimeType)
+      return { ok: true, data }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('profile:photo-remove', async (_event, payload) => {
+    try {
+      const data = await removeProfilePhoto(validatedPhotoSlot(payload?.slot))
       return { ok: true, data }
     } catch (error) {
       return { ok: false, error: error.message }

@@ -3,11 +3,17 @@ import { pharmacyView, requirePharmacyAuth } from '../middleware/pharmacyAuth.js
 import {
   confirmPharmacyLocation, createComplaint, createEntity, createProduct, deleteEntity, deleteProduct,
   getProfile, listComplaints, listEntity, listProducts, locationConfigured, loginPharmacy, logoutPharmacy,
-  registrationAvailability, registerPharmacy, replyComplaint, requestPasswordReset, resetPassword,
+  registrationAvailability, registerPharmacy, resendRegistrationOtp, replyComplaint, requestPasswordReset, resetPassword,
   searchPharmacyLocation, updateComplaintStatus, updateEntity, updateProduct, updateProfile,
+  verifyPharmacyRegistration,
 } from '../services/pharmacyService.js';
+import { removeProfilePhoto, uploadProfilePhoto, uploadRegistrationPhoto } from '../services/pharmacyPhotoService.js';
 
 const router = express.Router();
+const pharmacyPhotoBody = express.raw({
+  type: ['image/jpeg', 'image/png', 'image/webp'],
+  limit: '5mb',
+});
 
 function asyncRoute(handler) {
   return async (req, res) => {
@@ -27,6 +33,11 @@ router.post('/location/search', asyncRoute(async (req) => searchPharmacyLocation
 router.post('/location/confirm', asyncRoute(async (req) => confirmPharmacyLocation(req.body?.sessionId, req.body)));
 router.post('/auth/availability', asyncRoute(async (req) => registrationAvailability(req.body)));
 router.post('/auth/register', asyncRoute(async (req) => registerPharmacy(req.body)));
+router.post('/auth/register/verify', asyncRoute(async (req) => verifyPharmacyRegistration(req.body)));
+router.post('/auth/register/resend', asyncRoute(async (req) => resendRegistrationOtp(req.body?.challengeId)));
+router.post('/auth/register/photos/:slot', pharmacyPhotoBody, asyncRoute(async (req) => uploadRegistrationPhoto(
+  req.get('x-registration-photo-token'), req.params.slot, req.body,
+)));
 router.post('/auth/login', asyncRoute(async (req) => loginPharmacy(req.body)));
 router.post('/auth/forgot-password', asyncRoute(async (req) => requestPasswordReset(req.body?.email)));
 router.post('/auth/reset-password', asyncRoute(async (req) => resetPassword(req.body)));
@@ -47,6 +58,10 @@ router.delete('/entities/:entity/:id', asyncRoute(async (req) => deleteEntity(re
 
 router.get('/profile', asyncRoute(async (req) => getProfile(req.pharmacyAuth.ownerId)));
 router.put('/profile', asyncRoute(async (req) => updateProfile(req.pharmacyAuth.ownerId, req.body)));
+router.post('/profile/photos/:slot', pharmacyPhotoBody, asyncRoute(async (req) => uploadProfilePhoto(
+  req.pharmacyAuth.ownerId, req.params.slot, req.body,
+)));
+router.delete('/profile/photos/:slot', asyncRoute(async (req) => removeProfilePhoto(req.pharmacyAuth.ownerId, req.params.slot)));
 
 router.get('/complaints', asyncRoute(async (req) => listComplaints(req.pharmacyAuth.ownerId)));
 router.post('/complaints', asyncRoute(async (req) => createComplaint(req.pharmacyAuth.ownerId, req.body)));

@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   auth: {
     register: (payload) => ipcRenderer.invoke('auth:register', payload),
+    registerVerify: (payload) => ipcRenderer.invoke('auth:register-verify', payload),
+    registerResend: (payload) => ipcRenderer.invoke('auth:register-resend', payload),
     registrationAvailability: (payload) => ipcRenderer.invoke('auth:registration-availability', payload),
     login: (payload) => ipcRenderer.invoke('auth:login', payload),
     restore: (payload) => ipcRenderer.invoke('auth:restore', payload),
@@ -30,7 +32,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   profile: {
     get: (payload) => ipcRenderer.invoke('profile:get', payload),
-    save: (payload) => ipcRenderer.invoke('profile:save', payload)
+    save: (payload) => ipcRenderer.invoke('profile:save', payload),
+    uploadPhoto: (payload) => ipcRenderer.invoke('profile:photo-upload', payload),
+    removePhoto: (payload) => ipcRenderer.invoke('profile:photo-remove', payload)
+  },
+  registrationPhotos: {
+    pick: (payload) => ipcRenderer.invoke('photos:registration-pick', payload),
+    clear: (payload) => ipcRenderer.invoke('photos:registration-clear', payload)
   },
   complaints: {
     list: (payload) => ipcRenderer.invoke('complaints:list', payload),

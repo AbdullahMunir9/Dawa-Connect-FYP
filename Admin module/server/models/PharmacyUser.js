@@ -27,6 +27,7 @@ const pharmacyUserSchema = new mongoose.Schema({
   password: { type: String, select: false },
   resetOtpHash: { type: String, select: false },
   resetOtpExpiresAt: { type: Date, select: false },
+  emailVerifiedAt: { type: Date },
   status: { type: String, default: 'unapproved' },          // unapproved | approved | suspended | rejected (legacy title-case tolerated)
   approvalStatus: { type: String, default: 'unapproved' },  // unapproved | approved
   rejectionReason: { type: String, default: '' },

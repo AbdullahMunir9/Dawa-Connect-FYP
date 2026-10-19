@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import pharmacyDb from '../db/pharmacyConnection.js';
@@ -9,6 +9,10 @@ const MARKETPLACE_DB_NAME = process.env.MARKETPLACE_DB_NAME || 'MarketPlace';
 const PRODUCTS_COLLECTION = process.env.PHARMACY_PRODUCTS_COLLECTION || 'products';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const OTP_TTL_MS = 5 * 60 * 1000;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const OTP_RECORD_TTL_MS = 60 * 60 * 1000;
+const MAX_OTP_ATTEMPTS = 5;
+const MAX_OTP_SENDS = 5;
 const LOCATION_TTL_MS = 60 * 60 * 1000;
 const ENTITY_POLICIES = {
   orders: new Set(['read', 'update']),
@@ -30,7 +34,7 @@ const COMPLAINT_CLOSED = ['resolved', 'dismissed'];
 const locationSessions = new Map();
 let indexesReady;
 
-async function pharmacyDatabase() {
+export async function pharmacyDatabase() {
   if (pharmacyDb.readyState !== 1) await pharmacyDb.asPromise();
   if (!indexesReady) {
     indexesReady = Promise.all([
@@ -49,6 +53,12 @@ async function pharmacyDatabase() {
       pharmacyDb.collection('sessions').createIndex({ token: 1 }, { unique: true }),
       pharmacyDb.collection('sessions').createIndex({ userId: 1, revokedAt: 1, expiresAt: 1 }),
       pharmacyDb.collection('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+      pharmacyDb.collection('pendingRegistrations').createIndex({ challengeId: 1 }, { unique: true }),
+      pharmacyDb.collection('pendingRegistrations').createIndex({ email: 1 }, { unique: true }),
+      pharmacyDb.collection('pendingRegistrations').createIndex({ deleteAt: 1 }, { expireAfterSeconds: 0 }),
+      pharmacyDb.collection('verificationRateLimits').createIndex({ deleteAt: 1 }, { expireAfterSeconds: 0 }),
+      pharmacyDb.collection('registrationPhotoUploads').createIndex({ tokenHash: 1 }, { unique: true }),
+      pharmacyDb.collection('registrationPhotoUploads').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     ]).catch((error) => {
       indexesReady = null;
       throw error;
@@ -80,6 +90,7 @@ function normalizePhoneDigits(value) {
 function assertStrongPassword(password) {
   if (typeof password !== 'string' || password.length < 8) throw new Error('Password must be at least 8 characters.');
   if (!/[A-Z]/.test(password)) throw new Error('Password must include at least one uppercase letter.');
+  if (!/\d/.test(password)) throw new Error('Password must include at least one number.');
   if (!/[^A-Za-z0-9]/.test(password)) throw new Error('Password must include at least one special character.');
 }
 
@@ -199,7 +210,7 @@ function consumeConfirmedLocation(payload) {
   return { ...payload, ...session.confirmed, locationConfirmation: undefined };
 }
 
-async function seedInitialData(db, ownerId, payload) {
+async function seedInitialData(db, ownerId, payload, session = null) {
   const now = new Date();
   const coordinates = normalizedCoordinates(payload);
   await db.collection('profiles').updateOne(
@@ -209,19 +220,104 @@ async function seedInitialData(db, ownerId, payload) {
       email: payload.email, license: payload.licenseNumber,
       hours: `${payload.openingTime || '08:00'} - ${payload.closingTime || '22:00'}`,
       deliveryCharge: Number(payload.deliveryCharge || 50), deliveryRadius: Number(payload.serviceRadiusKm || 10),
-      ...coordinates, status: 'Open', approvalStatus: 'unapproved', logo: '💊', taxRate: 5,
+      ...coordinates, status: 'Open', approvalStatus: 'unapproved', logo: '💊', taxRate: 5, photos: {},
       bankName: 'HBL', accountNo: '', createdAt: now, updatedAt: now,
     } },
-    { upsert: true },
+    { upsert: true, ...(session ? { session } : {}) },
   );
   await db.collection('notifications').insertOne({
     ownerId, type: 'order', message: 'Welcome! Your pharmacy registration is awaiting approval.',
     read: false, color: '#14b8a6', createdAt: now, updatedAt: now,
-  });
+  }, session ? { session } : {});
 }
 
-export async function registerPharmacy(rawPayload = {}) {
-  const db = await pharmacyDatabase();
+function maskEmail(email) {
+  const [local, domain] = String(email || '').split('@');
+  if (!local || !domain) return email;
+  return `${local.slice(0, 2)}${'*'.repeat(Math.max(2, Math.min(6, local.length - 2)))}@${domain}`;
+}
+
+function registrationOtpHash(challengeId, email, otp) {
+  return createHmac('sha256', otpPepper()).update(`${challengeId}:${email}:${otp}`).digest('hex');
+}
+
+function otpMatches(actualHash, expectedHash) {
+  const actual = Buffer.from(String(actualHash || ''), 'hex');
+  const expected = Buffer.from(String(expectedHash || ''), 'hex');
+  return actual.length > 0 && actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+async function consumeRegistrationEmailLimit(db, email) {
+  const now = new Date();
+  const windowMs = 60 * 60 * 1000;
+  const windowCutoff = new Date(now.getTime() - windowMs);
+  const key = `pharmacy-signup:${createHash('sha256').update(email).digest('hex')}`;
+  const updated = await db.collection('verificationRateLimits').findOneAndUpdate(
+    { _id: key },
+    [{ $set: {
+      allowed: {
+        $or: [
+          { $lte: [{ $ifNull: ['$windowStartedAt', new Date(0)] }, windowCutoff] },
+          { $lt: [{ $ifNull: ['$count', 0] }, MAX_OTP_SENDS] },
+        ],
+      },
+      count: {
+        $cond: [
+          { $lte: [{ $ifNull: ['$windowStartedAt', new Date(0)] }, windowCutoff] },
+          1,
+          { $cond: [{ $lt: [{ $ifNull: ['$count', 0] }, MAX_OTP_SENDS] }, { $add: [{ $ifNull: ['$count', 0] }, 1] }, '$count'] },
+        ],
+      },
+      windowStartedAt: {
+        $cond: [
+          { $lte: [{ $ifNull: ['$windowStartedAt', new Date(0)] }, windowCutoff] }, now, '$windowStartedAt',
+        ],
+      },
+      updatedAt: now,
+      deleteAt: new Date(now.getTime() + windowMs),
+    } }],
+    { upsert: true, returnDocument: 'after' },
+  );
+  if (!updated?.allowed) {
+    const retryAfter = Math.max(1, Math.ceil((new Date(updated?.windowStartedAt || now).getTime() + windowMs - now.getTime()) / 1000));
+    throw Object.assign(new Error('Too many verification emails were requested. Please try again later.'), { status: 429, retryAfter });
+  }
+}
+
+async function sendResendEmail(message, failureMessage) {
+  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+  const from = String(process.env.RESEND_FROM_EMAIL || 'DawaConnect <noreply@dawaconnect.store>').trim();
+  if (!apiKey.startsWith('re_') || !from) {
+    throw Object.assign(new Error('Pharmacy email verification is not configured.'), { status: 503 });
+  }
+  let response;
+  try {
+    response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, ...message }),
+      signal: AbortSignal.timeout(12_000),
+    });
+  } catch {
+    throw Object.assign(new Error(failureMessage), { status: 502 });
+  }
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result?.id) throw Object.assign(new Error(failureMessage), { status: 502 });
+  return result.id;
+}
+
+async function sendRegistrationEmail(email, name, otp) {
+  const safeName = String(name || 'Pharmacy owner').replace(/[<>&"]/g, '');
+  return sendResendEmail({
+    to: [email],
+    subject: 'Verify your DawaConnect pharmacy email',
+    text: `Hello ${name || 'Pharmacy owner'}, your DawaConnect pharmacy verification code is ${otp}. It expires in 5 minutes.`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#0f172a"><div style="padding:24px;border-radius:18px;background:#f0fdfa;border:1px solid #99f6e4"><h2 style="margin:0 0 12px;color:#0f766e">Verify your pharmacy email</h2><p>Hello ${safeName},</p><p>Enter this code in the DawaConnect Pharmacy application to finish registration:</p><div style="margin:24px 0;padding:18px;text-align:center;border-radius:12px;background:#fff;font-size:30px;font-weight:800;letter-spacing:8px">${otp}</div><p style="color:#475569">This code expires in 5 minutes. Never share it with anyone.</p></div></div>`,
+    tags: [{ name: 'category', value: 'pharmacy_signup_otp' }],
+  }, 'The verification email could not be sent. Check the address and try again.');
+}
+
+async function prepareRegistration(db, rawPayload) {
   const payload = consumeConfirmedLocation(rawPayload);
   const email = String(payload.email || '').trim().toLowerCase();
   const phone = normalizePhoneDigits(payload.phone);
@@ -235,16 +331,163 @@ export async function registerPharmacy(rawPayload = {}) {
   if (!String(payload.licenseNumber || '').trim()) throw new Error('Drug license number is required.');
   const passwordHash = await bcrypt.hash(payload.password, 12);
   const coordinates = normalizedCoordinates(payload);
-  const now = new Date();
-  const doc = {
+  const registration = {
     ...cleanObject(payload, ['password', 'confirmPassword', 'locationConfirmation']), ...coordinates,
-    email, phone, phoneNormalized: phone, passwordHash, status: 'unapproved', approvalStatus: 'unapproved',
-    createdAt: now, updatedAt: now,
+    email, phone, phoneNormalized: phone,
   };
-  const result = await db.collection('users').insertOne(doc);
-  const ownerId = String(result.insertedId);
-  await seedInitialData(db, ownerId, { ...payload, email, phone });
-  return pharmacyView({ ...doc, _id: result.insertedId });
+  return { registration, passwordHash };
+}
+
+export async function registerPharmacy(rawPayload = {}) {
+  otpPepper();
+  const db = await pharmacyDatabase();
+  const { registration, passwordHash } = await prepareRegistration(db, rawPayload);
+  await consumeRegistrationEmailLimit(db, registration.email);
+  const now = new Date();
+  const challengeId = randomBytes(32).toString('base64url');
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const expiresAt = new Date(now.getTime() + OTP_TTL_MS);
+  const resendAvailableAt = new Date(now.getTime() + OTP_RESEND_COOLDOWN_MS);
+  const pending = {
+    challengeId,
+    email: registration.email,
+    phoneNormalized: registration.phoneNormalized,
+    registration,
+    passwordHash,
+    otpHash: registrationOtpHash(challengeId, registration.email, otp),
+    attempts: 0,
+    sendCount: 1,
+    expiresAt,
+    resendAvailableAt,
+    deleteAt: new Date(now.getTime() + OTP_RECORD_TTL_MS),
+    consumedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await db.collection('pendingRegistrations').findOneAndReplace(
+    { email: registration.email }, pending, { upsert: true },
+  );
+  try {
+    const emailId = await sendRegistrationEmail(registration.email, registration.ownerName, otp);
+    await db.collection('pendingRegistrations').updateOne({ challengeId }, { $set: { emailId, updatedAt: new Date() } });
+  } catch (error) {
+    await db.collection('pendingRegistrations').deleteOne({ challengeId });
+    throw error;
+  }
+  return {
+    message: 'Verification code sent.', challengeId, maskedEmail: maskEmail(registration.email),
+    expiresAt: expiresAt.toISOString(), resendAvailableAt: resendAvailableAt.toISOString(),
+  };
+}
+
+export async function resendRegistrationOtp(challengeIdValue) {
+  otpPepper();
+  const db = await pharmacyDatabase();
+  const challengeId = String(challengeIdValue || '');
+  const pending = await db.collection('pendingRegistrations').findOne({ challengeId, consumedAt: null });
+  if (!pending) throw new Error('This verification request is invalid or has already been used.');
+  const now = new Date();
+  if (new Date(pending.resendAvailableAt).getTime() > now.getTime()) {
+    const retryAfter = Math.max(1, Math.ceil((new Date(pending.resendAvailableAt).getTime() - now.getTime()) / 1000));
+    throw Object.assign(new Error(`You can request another code in ${retryAfter} seconds.`), { status: 429 });
+  }
+  if (Number(pending.sendCount || 0) >= MAX_OTP_SENDS) {
+    throw Object.assign(new Error('Too many codes were sent. Start registration again later.'), { status: 429 });
+  }
+  await consumeRegistrationEmailLimit(db, pending.email);
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const expiresAt = new Date(now.getTime() + OTP_TTL_MS);
+  const resendAvailableAt = new Date(now.getTime() + OTP_RESEND_COOLDOWN_MS);
+  const nextHash = registrationOtpHash(challengeId, pending.email, otp);
+  const updated = await db.collection('pendingRegistrations').findOneAndUpdate(
+    { _id: pending._id, consumedAt: null, resendAvailableAt: { $lte: now } },
+    { $set: { otpHash: nextHash, attempts: 0, expiresAt, resendAvailableAt, updatedAt: now }, $inc: { sendCount: 1 } },
+    { returnDocument: 'after' },
+  );
+  if (!updated) throw Object.assign(new Error('A new code is already being requested. Please wait.'), { status: 409 });
+  try {
+    const emailId = await sendRegistrationEmail(pending.email, pending.registration?.ownerName, otp);
+    await db.collection('pendingRegistrations').updateOne({ _id: pending._id, otpHash: nextHash }, { $set: { emailId, updatedAt: new Date() } });
+  } catch (error) {
+    await db.collection('pendingRegistrations').updateOne({ _id: pending._id, otpHash: nextHash }, { $set: {
+      otpHash: pending.otpHash, attempts: pending.attempts, expiresAt: pending.expiresAt,
+      resendAvailableAt: pending.resendAvailableAt, sendCount: pending.sendCount, updatedAt: pending.updatedAt,
+    } });
+    throw error;
+  }
+  return { message: 'A new verification code was sent.', expiresAt: expiresAt.toISOString(), resendAvailableAt: resendAvailableAt.toISOString() };
+}
+
+export async function verifyPharmacyRegistration({ challengeId: challengeIdValue, otp } = {}) {
+  otpPepper();
+  const db = await pharmacyDatabase();
+  const challengeId = String(challengeIdValue || '');
+  if (challengeId.length < 30 || !/^\d{6}$/.test(String(otp || ''))) throw new Error('Enter the six-digit verification code.');
+  const pending = await db.collection('pendingRegistrations').findOne({ challengeId, consumedAt: null });
+  if (!pending) throw new Error('This verification request is invalid or has already been used.');
+  if (new Date(pending.expiresAt).getTime() <= Date.now()) throw Object.assign(new Error('This verification code has expired. Request a new code.'), { status: 410 });
+  if (Number(pending.attempts || 0) >= MAX_OTP_ATTEMPTS) throw Object.assign(new Error('Too many incorrect attempts. Request a new code.'), { status: 429 });
+  const receivedHash = registrationOtpHash(challengeId, pending.email, String(otp));
+  if (!otpMatches(receivedHash, pending.otpHash)) {
+    const updated = await db.collection('pendingRegistrations').findOneAndUpdate(
+      { _id: pending._id, consumedAt: null, attempts: { $lt: MAX_OTP_ATTEMPTS } },
+      { $inc: { attempts: 1 }, $set: { updatedAt: new Date() } }, { returnDocument: 'after' },
+    );
+    const attemptsRemaining = Math.max(0, MAX_OTP_ATTEMPTS - Number(updated?.attempts || MAX_OTP_ATTEMPTS));
+    throw Object.assign(new Error(attemptsRemaining
+      ? `Incorrect verification code. ${attemptsRemaining} attempt${attemptsRemaining === 1 ? '' : 's'} remaining.`
+      : 'Too many incorrect attempts. Request a new code.'), { status: attemptsRemaining ? 400 : 429 });
+  }
+  if (await db.collection('users').findOne({ email: pending.email })) {
+    await db.collection('pendingRegistrations').deleteOne({ _id: pending._id });
+    throw Object.assign(new Error('This email is already registered. Sign in instead.'), { status: 409 });
+  }
+  if (await isPhoneTaken(db, pending.phoneNormalized)) {
+    await db.collection('pendingRegistrations').deleteOne({ _id: pending._id });
+    throw Object.assign(new Error('This phone number is already registered.'), { status: 409 });
+  }
+  const verifiedAt = new Date();
+  const claimed = await db.collection('pendingRegistrations').findOneAndUpdate(
+    { _id: pending._id, consumedAt: null, expiresAt: { $gt: verifiedAt }, attempts: { $lt: MAX_OTP_ATTEMPTS } },
+    { $set: { consumedAt: verifiedAt, updatedAt: verifiedAt } }, { returnDocument: 'after' },
+  );
+  if (!claimed) throw Object.assign(new Error('This verification request is no longer available.'), { status: 409 });
+  const doc = {
+    ...claimed.registration,
+    passwordHash: claimed.passwordHash,
+    emailVerifiedAt: verifiedAt,
+    status: 'unapproved', approvalStatus: 'unapproved', createdAt: verifiedAt, updatedAt: verifiedAt,
+  };
+  const photoUploadToken = randomBytes(32).toString('base64url');
+  const photoUploadExpiresAt = new Date(verifiedAt.getTime() + 15 * 60 * 1000);
+  let result;
+  const session = pharmacyDb.getClient().startSession();
+  try {
+    await session.withTransaction(async () => {
+      result = await db.collection('users').insertOne(doc, { session });
+      await seedInitialData(db, String(result.insertedId), doc, session);
+      await db.collection('registrationPhotoUploads').insertOne({
+        tokenHash: createHash('sha256').update(photoUploadToken).digest('hex'),
+        ownerId: String(result.insertedId), uploadedSlots: [],
+        expiresAt: photoUploadExpiresAt, createdAt: verifiedAt, updatedAt: verifiedAt,
+      }, { session });
+      await db.collection('pendingRegistrations').deleteOne({ _id: claimed._id }, { session });
+    });
+  } catch (error) {
+    await db.collection('pendingRegistrations').updateOne(
+      { _id: claimed._id, expiresAt: { $gt: new Date() } }, { $set: { consumedAt: null, updatedAt: new Date() } },
+    ).catch(() => {});
+    if (error?.code === 11000) throw Object.assign(new Error('This email or phone number is already registered.'), { status: 409 });
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+  return {
+    message: 'Email verified and pharmacy registration submitted.',
+    pharmacy: pharmacyView({ ...doc, _id: result.insertedId }),
+    photoUploadToken,
+    photoUploadExpiresAt: photoUploadExpiresAt.toISOString(),
+  };
 }
 
 async function createSession(db, ownerId) {
@@ -278,7 +521,7 @@ export async function logoutPharmacy(token) {
 
 function otpPepper() {
   const value = String(process.env.PHARMACY_OTP_PEPPER || '');
-  if (value.length < 32) throw Object.assign(new Error('Pharmacy password reset is not configured.'), { status: 503 });
+  if (value.length < 32) throw Object.assign(new Error('Pharmacy email verification is not configured.'), { status: 503 });
   return value;
 }
 
@@ -287,21 +530,12 @@ function otpHash(email, otp) {
 }
 
 async function sendResetEmail(email, name, otp) {
-  const apiKey = String(process.env.RESEND_API_KEY || '');
-  const from = String(process.env.RESEND_FROM_EMAIL || 'DawaConnect <noreply@dawaconnect.store>');
-  if (!apiKey.startsWith('re_')) throw Object.assign(new Error('Pharmacy password-reset email is not configured.'), { status: 503 });
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from, to: [email], subject: 'Reset your DawaConnect pharmacy password',
+  return sendResendEmail({
+      to: [email], subject: 'Reset your DawaConnect pharmacy password',
       text: `Your DawaConnect verification code is ${otp}. It expires in 5 minutes.`,
       html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto"><h2>DawaConnect Pharmacy</h2><p>Hello ${String(name || 'Pharmacy owner').replace(/[<>&"]/g, '')},</p><p>Your password reset code is:</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${otp}</p><p>This code expires in 5 minutes. If you did not request it, ignore this email.</p></div>`,
       tags: [{ name: 'category', value: 'pharmacy_password_reset' }],
-    }),
-    signal: AbortSignal.timeout(12_000),
-  });
-  if (!response.ok) throw Object.assign(new Error('The password-reset email could not be sent.'), { status: 502 });
+    }, 'The password-reset email could not be sent.');
 }
 
 export async function requestPasswordReset(emailValue) {
@@ -517,7 +751,7 @@ export async function getProfile(ownerId) {
       email: user.email || '', license: user.licenseNumber || '', hours: `${user.openingTime || '08:00'} - ${user.closingTime || '22:00'}`,
       deliveryCharge: Number(user.deliveryCharge || 50), deliveryRadius: Number(user.serviceRadiusKm || 10),
       status: 'Open', approvalStatus, logo: '💊', taxRate: 5, bankName: '', accountNo: '',
-      latitude: user.latitude, longitude: user.longitude, location: user.location, createdAt: now, updatedAt: now,
+      latitude: user.latitude, longitude: user.longitude, location: user.location, photos: {}, createdAt: now, updatedAt: now,
     };
     const result = await db.collection('profiles').insertOne(profile);
     profile._id = result.insertedId;

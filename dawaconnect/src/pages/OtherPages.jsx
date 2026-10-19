@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Camera, ImagePlus, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 const readOnlyFieldStyle = { background: '#f8fafc', color: '#64748b', cursor: 'not-allowed' };
@@ -36,15 +37,17 @@ function profileToFormState(p) {
     taxRate: p.taxRate ?? 5,
     bankName: p.bankName ?? '',
     accountNo: p.accountNo ?? '',
+    photos: p.photos ?? {},
     approvalStatus: p.approvalStatus ?? 'unapproved'
   };
 }
 
 export function ProfilePage() {
-  const { pharmacyProfile, setPharmacyProfile, user } = useApp();
+  const { pharmacyProfile, setPharmacyProfile, uploadPharmacyPhoto, removePharmacyPhoto, user } = useApp();
   const [form, setForm] = useState(() => ({ ...pharmacyProfile }));
   const [tab, setTab] = useState('general');
   const [saving, setSaving] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState('');
 
   const resolvedApproval = String(
     user?.approvalStatus || user?.status || pharmacyProfile?.approvalStatus || form.approvalStatus || 'unapproved'
@@ -67,6 +70,16 @@ export function ProfilePage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePhotoUpload = async (slot) => {
+    setPhotoBusy(slot);
+    try { await uploadPharmacyPhoto(slot); } finally { setPhotoBusy(''); }
+  };
+
+  const handlePhotoRemove = async (slot) => {
+    setPhotoBusy(slot);
+    try { await removePharmacyPhoto(slot); } finally { setPhotoBusy(''); }
   };
 
   return (
@@ -114,7 +127,7 @@ export function ProfilePage() {
         </div>
         <div style={{ padding: '0 24px' }}>
           <div className="tabs" style={{ margin: '16px 0' }}>
-            {[['general', 'General'], ['delivery', 'Delivery'], ['payment', 'Payment']].map(([k, l]) => (
+            {[['general', 'General'], ['photos', 'Photos'], ['delivery', 'Delivery'], ['payment', 'Payment']].map(([k, l]) => (
               <button key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{l}</button>
             ))}
           </div>
@@ -151,6 +164,29 @@ export function ProfilePage() {
               </div>
               <div className="alert alert-info">🗺 Map integration shows estimated delivery time based on customer location and distance radius.</div>
             </>)}
+            {tab === 'photos' && <>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 18, padding: '13px 15px', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 12, color: '#115e59' }}>
+                <Camera size={19} style={{ flex: '0 0 auto', marginTop: 1 }} />
+                <div><strong style={{ display: 'block', fontSize: 13 }}>Public pharmacy photos</strong><span style={{ display: 'block', marginTop: 3, fontSize: 11.5, lineHeight: 1.5 }}>These appear on your pharmacy page in the Marketplace. Use clear, recent photos without customer faces or private information.</span></div>
+              </div>
+              <div className="pharmacy-photo-grid pharmacy-profile-photo-grid">
+                {[
+                  ['outside', 'Outside photo', 'Storefront or main entrance'],
+                  ['inside', 'Inside photo', 'Counter, shelves, or customer area'],
+                ].map(([slot, label, description]) => {
+                  const photo = pharmacyProfile?.photos?.[slot];
+                  const busy = photoBusy === slot;
+                  return <div className="pharmacy-photo-card" key={slot}>
+                    <div className="pharmacy-photo-preview">{photo?.url ? <img src={photo.url} alt={label} /> : <><ImagePlus size={28} /><span>No photo uploaded</span></>}</div>
+                    <div className="pharmacy-photo-copy"><strong>{label}</strong><span>{description}</span><small>JPEG, PNG or WebP · max 5 MB</small></div>
+                    <div className="pharmacy-photo-actions">
+                      <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => handlePhotoUpload(slot)}><ImagePlus size={15} /> {busy ? 'Working…' : photo ? 'Replace' : 'Upload'}</button>
+                      {photo && <button type="button" className="pharmacy-photo-remove" disabled={busy} onClick={() => handlePhotoRemove(slot)}><Trash2 size={15} /> Remove</button>}
+                    </div>
+                  </div>;
+                })}
+              </div>
+            </>}
             {tab === 'payment' && (<>
               <div className="form-row">
                 <div className="form-group"><label className="form-label">Tax Rate (%)</label><input className="form-control" type="number" value={form.taxRate} onChange={e => set('taxRate', Number(e.target.value))} /></div>
@@ -158,7 +194,7 @@ export function ProfilePage() {
               </div>
               <div className="form-group"><label className="form-label">Account / IBAN</label><input className="form-control" value={form.accountNo} onChange={e => set('accountNo', e.target.value)} /></div>
             </>)}
-            <button type="submit" className="btn btn-primary" style={{ marginTop: 8 }} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>
+            {tab !== 'photos' && <button type="submit" className="btn btn-primary" style={{ marginTop: 8 }} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>}
           </div>
         </form>
       </div>

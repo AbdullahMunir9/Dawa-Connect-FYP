@@ -56,6 +56,10 @@ function buildPharmacyView(user, profile, productCount = 0, ratingSummary) {
   const longitude = longitudeValue != null && Number.isFinite(Number(longitudeValue))
     ? Number(longitudeValue)
     : null;
+  const photos = {
+    inside: profile?.photos?.inside?.url ? { url: String(profile.photos.inside.url) } : null,
+    outside: profile?.photos?.outside?.url ? { url: String(profile.photos.outside.url) } : null,
+  };
 
   return {
     id: ownerId,
@@ -83,6 +87,7 @@ function buildPharmacyView(user, profile, productCount = 0, ratingSummary) {
     rating,
     reviewCount,
     productCount: Number(productCount || 0),
+    photos,
   };
 }
 

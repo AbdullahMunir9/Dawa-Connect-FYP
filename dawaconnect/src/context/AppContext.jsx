@@ -202,10 +202,20 @@ export const AppProvider = ({ children }) => {
     try {
       const result = await window.electronAPI.auth.register(payload)
       if (!result.ok) return { ok: false, error: result.error || 'Registration failed' }
-      return { ok: true }
+      return { ok: true, data: result.data }
     } finally {
       setAuthLoading(false)
     }
+  }
+
+  const verifyRegistrationEmail = async (payload) => {
+    const result = await window.electronAPI.auth.registerVerify(payload)
+    return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error || 'Email verification failed' }
+  }
+
+  const resendRegistrationEmail = async (challengeId) => {
+    const result = await window.electronAPI.auth.registerResend({ challengeId })
+    return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error || 'Could not resend the verification code' }
   }
 
   const checkRegistrationAvailability = async ({ email, phone }) => {
@@ -363,6 +373,33 @@ export const AppProvider = ({ children }) => {
     return { ok: false, error: err }
   }
 
+  const uploadPharmacyPhoto = async (slot) => {
+    if (!user?.id) return { ok: false, error: 'Not signed in' }
+    const result = await window.electronAPI.profile.uploadPhoto({ slot })
+    if (result.ok && !result.canceled && result.data?.photo) {
+      setPharmacyProfileState((current) => ({
+        ...current,
+        photos: { ...(current?.photos || {}), [slot]: result.data.photo }
+      }))
+      showToast(`${slot === 'inside' ? 'Inside' : 'Outside'} pharmacy photo updated`)
+    } else if (!result.ok) showToast(result.error || 'Could not upload the pharmacy photo', 'error')
+    return result
+  }
+
+  const removePharmacyPhoto = async (slot) => {
+    if (!user?.id) return { ok: false, error: 'Not signed in' }
+    const result = await window.electronAPI.profile.removePhoto({ slot })
+    if (result.ok) {
+      setPharmacyProfileState((current) => {
+        const photos = { ...(current?.photos || {}) }
+        delete photos[slot]
+        return { ...current, photos }
+      })
+      showToast(`${slot === 'inside' ? 'Inside' : 'Outside'} pharmacy photo removed`)
+    } else showToast(result.error || 'Could not remove the pharmacy photo', 'error')
+    return result
+  }
+
   const applyComplaint = (updated) => {
     setComplaints((current) => {
       const replace = (list) => list.map((c) => (c.id === updated.id ? updated : c))
@@ -432,7 +469,7 @@ export const AppProvider = ({ children }) => {
 
   return (
     <AppContext.Provider value={{
-      user, login, register, checkRegistrationAvailability, logout, authLoading, requestPasswordReset, resetPasswordWithOtp,
+      user, login, register, verifyRegistrationEmail, resendRegistrationEmail, checkRegistrationAvailability, logout, authLoading, requestPasswordReset, resetPasswordWithOtp,
       inventory, addInventoryItem, updateInventoryItem, deleteInventoryItem,
       orders, updateOrderStatus,
       staff, addStaff, removeStaff,
@@ -440,7 +477,7 @@ export const AppProvider = ({ children }) => {
       notifications, markAllNotificationsRead, addNotification,
       complaints, fileComplaint, replyToComplaint, setComplaintStatus, openComplaintCount,
       toasts, showToast,
-      pharmacyProfile, setPharmacyProfile,
+      pharmacyProfile, setPharmacyProfile, uploadPharmacyPhoto, removePharmacyPhoto,
       unreadCount, lowStockItems, expiringItems,
       salesData, monthlyData
     }}>
