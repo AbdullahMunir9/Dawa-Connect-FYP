@@ -42,6 +42,9 @@ import {
 
 const isDev = !app.isPackaged
 const chatServiceUrl = pharmacyApiOrigin
+const applicationIconPath = () => app.isPackaged
+  ? join(process.resourcesPath, 'icon.png')
+  : join(__dirname, '../../resources/icon.png')
 let chatSocket = null
 let chatSessionToken = ''
 let chatTokenRefreshTimer = null
@@ -58,7 +61,6 @@ const DEFAULT_NOTIFICATION_PREFERENCES = {
 }
 let notificationPreferences = { ...DEFAULT_NOTIFICATION_PREFERENCES }
 let notifiedIds = new Set()
-const TRAY_ICON_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAIGSURBVFhH1VchT8NAFK4krM2QSH4CEonHIJGTSCQOFHfDLOya1BXJ3MwSkhnmmCBBkiBgDsWQyHLv+mh3vdfebW1J+JLP7L27973Xu/d23r9FcMMPOoIdrhJN7WA7vN71xdWpL/h9EPKkjH7IHv0hP+9GbA+X1kN3MNgJBLsMBP+mAloYgXDcan1AWf2QfxEbu1MK7wh+glu6IwhZb8Osacoq4tZ2qODUJjXph/0BhigHlL3RzAuEg4yhTKiTXveb2yiTk3H2MaQOKBG5KOMkmSUVWM6TI3KdwTGGzAHZ20tvEaDwmcQjaq1OowrQPChHnbmA2bRgG82TBdocKxFh6BTQwQinAisEAKevaHWogmAfGBq7HeVk0CJgxb54igm7zuwzwGChHEzaBMRJvEztLgKyDukP+8eUg8lmBchDf5YKkM2BdDDY7CfI2jOUgnQwaBGQ3QS3qwg3DwXI9ks4mKwSkNvcGxLrKQGqCZEORa4EKYVb9ory8CsBADkD3kknjRYBbxNiTQll1/VuL7YwPAiwzYHGqc8DaAqEU2uEq4+hc0jDuOjYCgV/xpA6/qoKZPa/cJuKtahPQQryft4RC2sTJq528kshnZoWAcFh6mIEN6gHCbHZBozcMieAbfqhsKErXyoP3DpIR7b8LA5/2dP3I/b5NqCebHBb1JsxJ/y+Xqk97weBXqyB5fsk2gAAAABJRU5ErkJggg=='
 
 function notificationStateFilePath() {
   return join(app.getPath('userData'), 'notification-settings.json')
@@ -112,8 +114,8 @@ function updateTrayMenu() {
 
 function createTray() {
   if (tray || !notificationPreferences.runInBackground) return
-  const image = nativeImage.createFromDataURL(TRAY_ICON_DATA_URL)
-  tray = new Tray(image)
+  const image = nativeImage.createFromPath(applicationIconPath())
+  tray = new Tray(image.resize({ width: 32, height: 32, quality: 'best' }))
   tray.on('double-click', () => showMainWindow())
   updateTrayMenu()
 }
@@ -151,6 +153,7 @@ function showNativeNotification(data, count = 1) {
   const notice = new Notification({
     title: summary ? `${count} new orders received` : 'New pharmacy order',
     body: summary ? `Open DawaConnect to review ${count} orders waiting for your pharmacy.` : nativeNotificationBody(data),
+    icon: applicationIconPath(),
     silent: !notificationPreferences.soundEnabled,
     urgency: 'critical'
   })
@@ -324,6 +327,7 @@ function createWindow() {
     height: 820,
     minWidth: 1024,
     minHeight: 700,
+    icon: applicationIconPath(),
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/preload.js'),

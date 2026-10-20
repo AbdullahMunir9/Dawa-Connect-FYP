@@ -34,10 +34,17 @@
       "out/**",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "resources/icon.png",
+        "to": "icon.png"
+      }
+    ],
     "directories": {
       "output": "release"
     },
     "win": {
+      "icon": "resources/icon.png",
       "target": [
         "nsis"
       ]
