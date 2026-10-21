@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:auth": "node --test src/lib/googleIdentity.test.mjs src/lib/authRedirect.test.mjs src/lib/emailVerification.test.mjs",
+    "test:ai": "node --test src/lib/aiScope.test.mjs",
     "test:commerce": "node --test src/lib/cartGroups.test.mjs src/lib/deliveryRanking.test.mjs",
     "test:auth-ui": "playwright test --config playwright.auth-ui.config.mjs",
     "test:maps": "node --test src/lib/healthcareGeo.test.mjs src/lib/healthcareProvider.test.mjs src/lib/healthcareMapStyle.test.mjs",
