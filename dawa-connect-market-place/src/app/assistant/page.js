@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Send, Bot, Loader2, LockKeyhole, Sparkles, RotateCcw, Copy, Check, ShieldAlert, Pill, AlertTriangle, HelpCircle, Stethoscope, Zap, ArrowDown } from "lucide-react";
+import { Send, Bot, Loader2, LockKeyhole, Sparkles, RotateCcw, Copy, Check, ShieldAlert, Pill, AlertTriangle, HelpCircle, Stethoscope, ArrowDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/context/AuthContext";
 import { cn, initials } from "@/components/ui";
@@ -239,15 +239,6 @@ export default function AssistantPage() {
             <div className="rounded-2xl border border-gray-200 bg-white p-5">
               <QuotaMeter quota={quota} />
               {!quota && <p className="text-xs text-gray-500">Up to 20 questions per day.</p>}
-            </div>
-
-            <div className="hidden rounded-2xl border border-gray-200 bg-white p-5 lg:block">
-              <p className="flex items-center gap-2 text-sm font-semibold text-gray-900"><Zap className="h-4 w-4 text-amber-500" /> Try asking</p>
-              <ul className="mt-3 space-y-1.5">
-                {SUGGESTIONS.map((s) => (
-                  <li key={s.title}><button type="button" onClick={() => void sendMessage(s.prompt)} disabled={isLoading || limitReached} className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] text-gray-700 transition hover:bg-blue-50 hover:text-blue-800 disabled:opacity-50"><s.icon className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" /><span><span className="block font-semibold">{s.title}</span><span className="line-clamp-2 text-xs text-gray-500">{s.prompt}</span></span></button></li>
-                ))}
-              </ul>
             </div>
 
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
