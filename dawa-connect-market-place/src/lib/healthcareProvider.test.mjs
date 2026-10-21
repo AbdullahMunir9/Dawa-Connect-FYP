@@ -119,6 +119,52 @@ test('areas only returns Pakistani administrative areas, never businesses', asyn
   assert.deepEqual(areas, [{ id: 'geoapify:city', label: 'Lahore, Pakistan', ...center }]);
 });
 
+test('delivery location search accepts precise Pakistani addresses and returns only public address fields', async () => {
+  let requested;
+  const provider = fixture(async (url) => {
+    requested = new URL(url);
+    return response([
+      feature('home', {
+        formatted: '12 Main Boulevard, Gulberg, Lahore, Pakistan',
+        address_line1: '12 Main Boulevard',
+        city: 'Lahore',
+        state: 'Punjab',
+        postcode: '54660',
+        datasource: { raw: { private: fakeKey } },
+      }),
+      feature('foreign-home', { country_code: 'in' }),
+    ]);
+  });
+  const locations = await provider.locations('12 Main Boulevard Lahore');
+  assert.equal(requested.pathname, '/v1/geocode/search');
+  assert.equal(requested.searchParams.get('type'), null);
+  assert.equal(requested.searchParams.get('filter'), 'countrycode:pk');
+  assert.deepEqual(locations, [{
+    id: 'geoapify:home',
+    label: '12 Main Boulevard, Gulberg, Lahore, Pakistan',
+    line1: '12 Main Boulevard',
+    city: 'Lahore',
+    province: 'Punjab',
+    postalCode: '54660',
+    ...center,
+  }]);
+  assert.equal(JSON.stringify(locations).includes(fakeKey), false);
+});
+
+test('reverse delivery lookup uses the selected coordinates and returns a normalized address', async () => {
+  let requested;
+  const provider = fixture(async (url) => {
+    requested = new URL(url);
+    return response([feature('current', { address_line1: 'Current Road', state: 'Punjab' })]);
+  });
+  const location = await provider.reverseLocation(center);
+  assert.equal(requested.pathname, '/v1/geocode/reverse');
+  assert.equal(requested.searchParams.get('lat'), '31.52');
+  assert.equal(requested.searchParams.get('lon'), '74.35');
+  assert.equal(location.line1, 'Current Road');
+  assert.equal(location.city, 'Lahore');
+});
+
 const route = {
   type: 'Feature',
   geometry: {

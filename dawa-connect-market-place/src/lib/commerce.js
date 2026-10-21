@@ -3,6 +3,7 @@ import "server-only";
 import { randomBytes } from "crypto";
 import mongoose from "mongoose";
 import { getCommerceDatabases } from "@/lib/pharmacyCatalog";
+import { assessPharmacyDelivery } from "@/lib/deliveryRanking.mjs";
 
 export class CommerceError extends Error {
   constructor(message, status = 400, code = "COMMERCE_ERROR") {
@@ -73,6 +74,20 @@ function normalizeDeliveryAddress(address) {
   }
   normalized.label ||= "Delivery";
 
+  const hasLatitude = address?.latitude !== undefined && address?.latitude !== null && address?.latitude !== "";
+  const hasLongitude = address?.longitude !== undefined && address?.longitude !== null && address?.longitude !== "";
+  if (hasLatitude !== hasLongitude) {
+    throw new CommerceError("Choose a valid delivery location", 400, "INVALID_DELIVERY_LOCATION");
+  }
+  if (hasLatitude) {
+    normalized.latitude = Number(address.latitude);
+    normalized.longitude = Number(address.longitude);
+    if (!Number.isFinite(normalized.latitude) || normalized.latitude < -90 || normalized.latitude > 90 ||
+      !Number.isFinite(normalized.longitude) || normalized.longitude < -180 || normalized.longitude > 180) {
+      throw new CommerceError("Choose a valid delivery location", 400, "INVALID_DELIVERY_LOCATION");
+    }
+  }
+
   for (const field of ["fullName", "phone", "line1", "city"]) {
     if (!normalized[field]) {
       throw new CommerceError(`Delivery address ${field} is required`, 400, "INVALID_ADDRESS");
@@ -124,6 +139,14 @@ export async function createCommerceOrder({
         throw new CommerceError("Please select a valid saved delivery address", 400, "INVALID_ADDRESS");
       }
       const deliveryAddress = savedAddress || normalizeDeliveryAddress(suppliedAddress);
+      if (typeof deliveryAddress.latitude !== "number" || typeof deliveryAddress.longitude !== "number" ||
+        !Number.isFinite(deliveryAddress.latitude) || !Number.isFinite(deliveryAddress.longitude)) {
+        throw new CommerceError(
+          "Choose a precise delivery location so the pharmacy delivery radius can be verified",
+          400,
+          "DELIVERY_LOCATION_REQUIRED",
+        );
+      }
       const shouldSaveAddress = Boolean(customer && !savedAddress && saveAddress);
       if (shouldSaveAddress) {
         deliveryAddress._id = new mongoose.Types.ObjectId();
@@ -159,6 +182,22 @@ export async function createCommerceOrder({
       });
       if (closedPharmacy) {
         throw new CommerceError("One or more pharmacies in your cart are currently closed", 409, "PHARMACY_CLOSED");
+      }
+
+      const destination = { latitude: deliveryAddress.latitude, longitude: deliveryAddress.longitude };
+      const outsideDeliveryArea = pharmacyIds.find((id) => {
+        const user = pharmacyUsers.find((pharmacy) => String(pharmacy._id) === id);
+        const profile = profilesByOwner.get(id);
+        const assessment = assessPharmacyDelivery({
+          latitude: profile?.latitude ?? user?.latitude,
+          longitude: profile?.longitude ?? user?.longitude,
+          deliveryRadius: profile?.deliveryRadius ?? user?.serviceRadiusKm,
+          isOpen: true,
+        }, destination);
+        return !assessment.canDeliver;
+      });
+      if (outsideDeliveryArea) {
+        throw new CommerceError("This pharmacy cannot deliver to the selected address. Choose a closer pharmacy or another delivery location.", 409, "OUTSIDE_DELIVERY_RADIUS");
       }
 
       const productObjectIds = requestedItems.map((item) => new mongoose.Types.ObjectId(item.productId));

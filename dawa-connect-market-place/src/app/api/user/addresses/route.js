@@ -41,6 +41,14 @@ export async function POST(req) {
     for (const field of required) {
       if (!body[field]) return NextResponse.json({ message: `${field} is required` }, { status: 400 });
     }
+    const hasLatitude = body.latitude !== undefined && body.latitude !== null && body.latitude !== "";
+    const hasLongitude = body.longitude !== undefined && body.longitude !== null && body.longitude !== "";
+    const latitude = hasLatitude ? Number(body.latitude) : null;
+    const longitude = hasLongitude ? Number(body.longitude) : null;
+    if (hasLatitude !== hasLongitude || (hasLatitude && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+      !Number.isFinite(longitude) || longitude < -180 || longitude > 180))) {
+      return NextResponse.json({ message: "Choose a valid map location for this address" }, { status: 400 });
+    }
 
     await connectToDatabase();
     const user = await User.findById(userId);
@@ -63,6 +71,8 @@ export async function POST(req) {
       city: body.city,
       province: body.province || "",
       postalCode: body.postalCode || "",
+      latitude,
+      longitude,
       isDefault: shouldBeDefault,
     });
 

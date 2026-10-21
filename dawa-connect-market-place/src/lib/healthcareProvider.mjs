@@ -67,6 +67,24 @@ function normalizeFacility(feature, center, radiusKm) {
   };
 }
 
+function normalizeLocation(feature) {
+  const properties = feature?.properties;
+  const coordinates = featurePoint(feature);
+  const placeId = text(properties?.place_id, 1000);
+  const label = text(properties?.formatted, 600);
+  const country = text(properties?.country_code).toLowerCase();
+  if (!coordinates || !placeId || !label || (country && country !== 'pk')) return null;
+  return {
+    id: `geoapify:${placeId}`,
+    label,
+    line1: text(properties?.address_line1, 200) || label,
+    city: text(properties?.city, 100) || text(properties?.town, 100) || text(properties?.county, 100),
+    province: text(properties?.state, 100),
+    postalCode: text(properties?.postcode, 30),
+    ...coordinates,
+  };
+}
+
 function invalidInput(message) {
   return new HealthcareProviderError('invalid_request', message, 400);
 }
@@ -184,6 +202,40 @@ export function createHealthcareProvider({ apiKey = () => process.env.GEOAPIFY_A
         if (results.size === 5) break;
       }
       return [...results.values()];
+    },
+
+    async locations(query) {
+      if (typeof query !== 'string' || query.trim().length < 3 || query.trim().length > 160) {
+        throw invalidInput('Enter an address, area or city between 3 and 160 characters.');
+      }
+      const features = await request('/v1/geocode/search', {
+        text: query.trim(),
+        filter: 'countrycode:pk',
+        lang: 'en',
+        limit: '6',
+        format: 'geojson',
+      });
+      const results = new Map();
+      for (const feature of features) {
+        const location = normalizeLocation(feature);
+        if (location) results.set(location.id, location);
+      }
+      return [...results.values()].slice(0, 6);
+    },
+
+    async reverseLocation({ latitude, longitude }) {
+      const center = point(latitude, longitude);
+      if (!center) throw invalidInput('Choose valid location coordinates.');
+      const features = await request('/v1/geocode/reverse', {
+        lat: String(center.latitude),
+        lon: String(center.longitude),
+        lang: 'en',
+        limit: '1',
+        format: 'geojson',
+      });
+      const location = normalizeLocation(features[0]);
+      if (!location) throw new HealthcareProviderError('not_found', 'No address was found for this location.', 404);
+      return location;
     },
 
     async directions({ from, to, mode = 'drive' }) {

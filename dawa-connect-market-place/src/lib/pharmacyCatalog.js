@@ -2,6 +2,7 @@ import "server-only";
 
 import mongoose from "mongoose";
 import connectToDatabase from "@/lib/mongodb";
+import { assessPharmacyDelivery, selectOptimalOffer } from "@/lib/deliveryRanking.mjs";
 
 const PHARMACY_DB_NAME = process.env.PHARMACY_DB_NAME || "Pharmacy";
 
@@ -114,6 +115,10 @@ function buildProductView(product, pharmacy) {
     pharmacyRating: pharmacy.rating,
     pharmacyDistance: pharmacy.city || pharmacy.address || "Registered pharmacy",
     distanceMiles: null,
+    pharmacyLatitude: pharmacy.latitude,
+    pharmacyLongitude: pharmacy.longitude,
+    pharmacyIsOpen: pharmacy.isOpen,
+    deliveryRadius: pharmacy.deliveryRadius,
     timing: pharmacy.timing,
     deliveryAvailable: pharmacy.isOpen,
     deliveryCharge: pharmacy.deliveryCharge,
@@ -241,6 +246,9 @@ export async function searchPharmacyCatalog({
   inStockOnly = false,
   deliveryOnly = false,
   sortBy = "relevance",
+  latitude,
+  longitude,
+  maxDistance = Number.POSITIVE_INFINITY,
 } = {}) {
   const { pharmacyDb } = await getCommerceDatabases();
   const users = await pharmacyDb.collection("users").find(activePharmacyFilter()).toArray();
@@ -252,7 +260,7 @@ export async function searchPharmacyCatalog({
   });
   const ownerIds = eligiblePharmacies.map((pharmacy) => pharmacy.id);
   if (!ownerIds.length) {
-    return { items: [], pagination: { page: 1, limit, total: 0, totalPages: 1, startIndex: 0, endIndex: 0 } };
+    return { optimalPharmacy: null, locationApplied: false, items: [], pagination: { page: 1, limit, total: 0, totalPages: 1, startIndex: 0, endIndex: 0 } };
   }
 
   const normalizedQuery = String(query || "").trim();
@@ -271,13 +279,38 @@ export async function searchPharmacyCatalog({
 
   let products = await pharmacyDb.collection("products").find(productFilter).toArray();
   const pharmacyById = new Map(eligiblePharmacies.map((pharmacy) => [pharmacy.id, pharmacy]));
+  const destination = typeof latitude === "number" && typeof longitude === "number" &&
+    Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? { latitude: Number(latitude), longitude: Number(longitude) }
+    : null;
+
   products = products
     .map((product) => buildProductView(product, pharmacyById.get(idString(product.ownerId))))
-    .filter((product) => product.pharmacyId);
+    .filter((product) => product.pharmacyId)
+    .map((product) => ({
+      ...product,
+      ...assessPharmacyDelivery({
+        latitude: product.pharmacyLatitude,
+        longitude: product.pharmacyLongitude,
+        deliveryRadius: product.deliveryRadius,
+        isOpen: product.pharmacyIsOpen,
+      }, destination),
+    }));
+
+  const maximumDistance = Number(maxDistance);
+  if (destination && Number.isFinite(maximumDistance) && maximumDistance > 0 && maximumDistance < 1000) {
+    products = products.filter((product) => Number.isFinite(product.distanceKm) && product.distanceKm <= maximumDistance);
+  }
+  if (deliveryOnly && destination) products = products.filter((product) => product.canDeliver);
+
+  const optimalPharmacy = selectOptimalOffer(products);
 
   products.sort((a, b) => {
     if (sortBy === "lowest-price") return a.price - b.price;
     if (sortBy === "highest-rated") return Number(b.pharmacyRating || 0) - Number(a.pharmacyRating || 0);
+    if (sortBy === "nearest") {
+      return Number(a.distanceKm ?? Number.POSITIVE_INFINITY) - Number(b.distanceKm ?? Number.POSITIVE_INFINITY);
+    }
     if (sortBy === "stock") return b.stock - a.stock;
     if (normalizedQuery) {
       const needle = normalizedQuery.toLowerCase();
@@ -295,6 +328,10 @@ export async function searchPharmacyCatalog({
   const start = (safePage - 1) * safeLimit;
 
   return {
+    optimalPharmacy: optimalPharmacy
+      ? { ...optimalPharmacy, recommendationReason: "Lowest checkout total that can be delivered to this location" }
+      : null,
+    locationApplied: Boolean(destination),
     items: products.slice(start, start + safeLimit),
     pagination: {
       page: safePage,

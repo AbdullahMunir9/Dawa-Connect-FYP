@@ -9,6 +9,8 @@ const AddressSchema = new mongoose.Schema({
   city: String,
   province: String,
   postalCode: String,
+  latitude: Number,
+  longitude: Number,
 }, { _id: false });
 
 const OrderItemSchema = new mongoose.Schema({

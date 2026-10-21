@@ -8,6 +8,7 @@ import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { formatPKR } from "@/lib/currency";
 import { reverseGeocode } from "@/lib/osm";
+import { readDeliveryLocation } from "@/lib/deliveryLocation";
 
 const emptyManualAddress = {
   label: "Home",
@@ -18,6 +19,8 @@ const emptyManualAddress = {
   city: "",
   province: "",
   postalCode: "",
+  latitude: null,
+  longitude: null,
 };
 
 const addressInputClass =
@@ -45,6 +48,20 @@ function CheckoutContent() {
   const [locationError, setLocationError] = useState("");
 
   useEffect(() => {
+    const location = readDeliveryLocation();
+    if (!location) return;
+    setManualAddress((current) => ({
+      ...current,
+      line1: current.line1 || location.line1 || location.label,
+      city: current.city || location.city,
+      province: current.province || location.province,
+      postalCode: current.postalCode || location.postalCode,
+      latitude: location.latitude,
+      longitude: location.longitude,
+    }));
+  }, []);
+
+  useEffect(() => {
     const fetchAddresses = async () => {
       const response = await fetch("/api/user/addresses");
       if (!response.ok) return;
@@ -52,7 +69,8 @@ function CheckoutContent() {
       const nextAddresses = data.addresses || [];
       setAddresses(nextAddresses);
       const defaultAddress = nextAddresses.find((address) => address.isDefault) || nextAddresses[0];
-      if (defaultAddress) {
+      const searchDestination = readDeliveryLocation();
+      if (defaultAddress && !searchDestination) {
         setSelectedAddressId(String(defaultAddress._id));
         setAddressMode("saved");
       } else {
@@ -90,9 +108,18 @@ function CheckoutContent() {
     (field) => manualAddress[field].trim()
   );
   const checkoutAddress = usingSavedAddress ? selectedAddress : manualAddress;
+  const checkoutAddressHasCoordinates = typeof checkoutAddress?.latitude === "number" &&
+    typeof checkoutAddress?.longitude === "number" &&
+    Number.isFinite(checkoutAddress.latitude) && Number.isFinite(checkoutAddress.longitude);
 
   const updateManualAddress = (field, value) => {
-    setManualAddress((current) => ({ ...current, [field]: value }));
+    setManualAddress((current) => ({
+      ...current,
+      [field]: value,
+      ...(["line1", "line2", "city", "province", "postalCode"].includes(field)
+        ? { latitude: null, longitude: null }
+        : {}),
+    }));
   };
 
   const useCurrentLocation = async () => {
@@ -121,6 +148,8 @@ function CheckoutContent() {
         city: detectedAddress.city || current.city,
         province: detectedAddress.province || current.province,
         postalCode: detectedAddress.postalCode || current.postalCode,
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
       }));
     } catch (error) {
       if (error?.code === 1) {
@@ -141,6 +170,10 @@ function CheckoutContent() {
     setCheckoutError("");
     if (!selectedCart || !checkoutAddress || (!usingSavedAddress && !manualAddressValid) || checkoutItems.length === 0) {
       setCheckoutError("Please complete the required delivery address fields.");
+      return;
+    }
+    if (!checkoutAddressHasCoordinates) {
+      setCheckoutError("Choose a precise delivery location so we can confirm that this pharmacy delivers there. Use your search destination or the current-location button.");
       return;
     }
     setPlacingOrder(true);
@@ -418,6 +451,9 @@ function CheckoutContent() {
               {checkoutAddress.line2 ? <p className="text-sm text-gray-600">{checkoutAddress.line2}</p> : null}
               <p className="text-sm text-gray-600">{checkoutAddress.city}{checkoutAddress.province ? `, ${checkoutAddress.province}` : ""} {checkoutAddress.postalCode}</p>
               <p className="text-sm text-gray-900 mt-1">{checkoutAddress.phone}</p>
+              <p className={`mt-3 text-xs font-medium ${checkoutAddressHasCoordinates ? "text-emerald-700" : "text-amber-700"}`}>
+                {checkoutAddressHasCoordinates ? "Precise delivery point confirmed" : "This saved address needs a precise delivery point before ordering"}
+              </p>
             </div>
           )}
         </div>
@@ -458,7 +494,7 @@ function CheckoutContent() {
 
             <button
               onClick={handlePlaceOrder}
-              disabled={placingOrder || authLoading || checkoutItems.length === 0 || (usingSavedAddress ? !selectedAddress : !manualAddressValid)}
+              disabled={placingOrder || authLoading || checkoutItems.length === 0 || !checkoutAddressHasCoordinates || (usingSavedAddress ? !selectedAddress : !manualAddressValid)}
               className="w-full bg-blue-800 text-white font-medium py-3 rounded-lg hover:bg-blue-900 transition-colors flex items-center justify-center gap-2 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {placingOrder ? "Placing Order..." : "Confirm & Place Order"} <ChevronRight className="w-5 h-5" />

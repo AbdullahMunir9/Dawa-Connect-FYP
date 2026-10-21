@@ -22,6 +22,9 @@ export async function GET(req) {
       inStockOnly: searchParams.get("inStockOnly") === "true",
       deliveryOnly: searchParams.get("deliveryOnly") === "true",
       sortBy: searchParams.get("sortBy") || "relevance",
+      latitude: optionalNumber(searchParams, "latitude", null),
+      longitude: optionalNumber(searchParams, "longitude", null),
+      maxDistance: optionalNumber(searchParams, "maxDistance", Number.POSITIVE_INFINITY),
     });
 
     return NextResponse.json({ query: query.toLowerCase(), ...result });

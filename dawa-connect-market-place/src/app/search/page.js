@@ -3,11 +3,75 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, MapPin, Star, ChevronDown, ChevronLeft, ChevronRight, MessageSquareHeart, X } from "lucide-react";
+import { Search, MapPin, Star, ChevronDown, ChevronLeft, ChevronRight, MessageSquareHeart, X, Truck, Clock3, CircleAlert, BadgeCheck } from "lucide-react";
 import { formatPKR } from "@/lib/currency";
 import { useCart } from "@/context/CartContext";
 import { getClientSessionId } from "@/lib/clientSession";
 import VoiceMedicineSearchButton from "@/components/VoiceMedicineSearchButton";
+import SearchDeliveryLocation from "@/components/SearchDeliveryLocation";
+import { readDeliveryLocation, saveDeliveryLocation } from "@/lib/deliveryLocation";
+
+const emptyPagination = { page: 1, totalPages: 1, total: 0, startIndex: 0, endIndex: 0 };
+
+function DeliveryBadge({ item }) {
+  const styles = {
+    delivers: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    closed: "border-amber-200 bg-amber-50 text-amber-800",
+    "outside-radius": "border-rose-200 bg-rose-50 text-rose-700",
+    "location-unavailable": "border-gray-200 bg-gray-100 text-gray-600",
+    "location-required": "border-blue-200 bg-blue-50 text-blue-700",
+  };
+  const Icon = item.deliveryStatus === "delivers" ? Truck : item.deliveryStatus === "closed" ? Clock3 : CircleAlert;
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${styles[item.deliveryStatus] || styles["location-unavailable"]}`}>
+      <Icon className="h-3.5 w-3.5" /> {item.deliveryMessage}
+    </span>
+  );
+}
+
+function OptimalPharmacyCard({ item, destination, onAdd, loading }) {
+  if (!destination) {
+    return (
+      <div className="mt-4 rounded-2xl border border-dashed border-blue-200 bg-blue-50/60 px-5 py-4 text-sm text-blue-900">
+        <strong>Want the best local price?</strong> Choose the address where you want delivery and we’ll compare product price, tax, delivery and processing charges.
+      </div>
+    );
+  }
+  if (loading && !item) {
+    return <div className="mt-4 animate-pulse rounded-2xl border border-gray-200 bg-white px-5 py-6 text-sm text-gray-500">Calculating the best deliverable checkout price…</div>;
+  }
+  if (!item) {
+    return (
+      <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+        <strong>No deliverable match near this destination yet.</strong> All pharmacies that stock the medicine are still listed below, including closed and out-of-range options.
+      </div>
+    );
+  }
+  const estimate = item.checkoutEstimate;
+  return (
+    <section className="mt-4 overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-[0_12px_35px_rgba(16,185,129,0.10)]" aria-label="Best pharmacy for selected delivery location">
+      <div className="flex items-center gap-2 bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white">
+        <BadgeCheck className="h-4 w-4" /> Best deliverable option for this search
+      </div>
+      <div className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">{item.pharmacyName}</p>
+          <Link href={`/product/${item.id}`} className="mt-1 block truncate text-lg font-bold text-gray-950 hover:text-blue-800 hover:underline">{item.name}</Link>
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
+            <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" /> {Number(item.distanceKm).toFixed(1)} km away</span>
+            <span className="inline-flex items-center gap-1"><Truck className="h-4 w-4" /> Delivery {formatPKR(estimate.deliveryFee)}</span>
+            <span className="inline-flex items-center gap-1"><Star className="h-4 w-4 fill-orange-400 text-orange-400" /> {item.pharmacyRating ?? "New"}</span>
+          </div>
+          <p className="mt-2 text-xs text-gray-500">{item.recommendationReason}</p>
+        </div>
+        <div className="flex items-end justify-between gap-4 border-t border-gray-100 pt-4 md:block md:min-w-44 md:border-l md:border-t-0 md:pl-5 md:pt-0 md:text-right">
+          <div><p className="text-xs text-gray-500">Estimated checkout total</p><p className="text-2xl font-black text-emerald-700">{formatPKR(estimate.total)}</p><p className="text-[11px] text-gray-400">including delivery and fees</p></div>
+          <button type="button" onClick={() => onAdd(item)} className="mt-3 rounded-xl bg-blue-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-900">Add to cart</button>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function SearchResultsGridInner() {
   const { addToCart } = useCart();
@@ -17,17 +81,20 @@ function SearchResultsGridInner() {
   const [activeQuery, setActiveQuery] = useState("");
   const [page, setPage] = useState(1);
   const [results, setResults] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0, startIndex: 0, endIndex: 0 });
+  const [pagination, setPagination] = useState(emptyPagination);
+  const [optimalPharmacy, setOptimalPharmacy] = useState(null);
+  const [destination, setDestination] = useState(null);
+  const [locationReady, setLocationReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [recentSearches, setRecentSearches] = useState([]);
   const [filters, setFilters] = useState({
     minPrice: 0,
     maxPrice: 10000,
-    maxDistance: 5,
+    maxDistance: 1000,
     inStockOnly: true,
     deliveryOnly: false,
-    minRating: 4.5,
+    minRating: 0,
     sortBy: "relevance",
   });
 
@@ -36,9 +103,10 @@ function SearchResultsGridInner() {
   const skippedInitialFiltersFetch = useRef(false);
   const skipNextUrlSync = useRef(false);
 
-  const fetchSearchResults = async (nextPage = 1, searchValue = activeQuery, nextFilters = filters) => {
+  const fetchSearchResults = async (nextPage = 1, searchValue = activeQuery, nextFilters = filters, nextDestination = destination) => {
     setLoading(true);
     setError("");
+    if (nextPage === 1) setOptimalPharmacy(null);
     try {
       const params = new URLSearchParams({
         query: searchValue,
@@ -52,12 +120,17 @@ function SearchResultsGridInner() {
         deliveryOnly: String(nextFilters.deliveryOnly),
         sortBy: nextFilters.sortBy,
       });
+      if (nextDestination) {
+        params.set("latitude", String(nextDestination.latitude));
+        params.set("longitude", String(nextDestination.longitude));
+      }
 
       const response = await fetch(`/api/search?${params.toString()}`);
       if (!response.ok) throw new Error("Failed to load results");
       const data = await response.json();
       setResults(data.items || []);
-      setPagination(data.pagination || { page: 1, totalPages: 1, total: 0, startIndex: 0, endIndex: 0 });
+      setPagination(data.pagination || emptyPagination);
+      setOptimalPharmacy(data.optimalPharmacy || null);
     } catch (fetchError) {
       setError(fetchError.message || "Something went wrong");
     } finally {
@@ -85,7 +158,12 @@ function SearchResultsGridInner() {
   };
 
   useEffect(() => {
-    if (!sessionId) return;
+    setDestination(readDeliveryLocation());
+    setLocationReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!sessionId || !locationReady) return;
     if (skipNextUrlSync.current) {
       skipNextUrlSync.current = false;
       return;
@@ -94,10 +172,10 @@ function SearchResultsGridInner() {
     setQuery(qFromUrl);
     setActiveQuery(qFromUrl);
     fetchRecentSearches();
-    fetchSearchResults(1, qFromUrl, filters);
+    fetchSearchResults(1, qFromUrl, filters, destination);
     setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, searchParams.toString()]);
+  }, [sessionId, locationReady, searchParams.toString()]);
 
   useEffect(() => {
     if (!skippedInitialFiltersFetch.current) {
@@ -118,6 +196,13 @@ function SearchResultsGridInner() {
     router.replace(normalized ? `/search?q=${encodeURIComponent(normalized)}` : "/search");
     await fetchSearchResults(1, normalized, filters);
     if (normalized) await saveRecentSearch(normalized);
+  };
+
+  const handleDestinationChange = async (nextLocation) => {
+    const normalized = saveDeliveryLocation(nextLocation);
+    setDestination(normalized);
+    setPage(1);
+    await fetchSearchResults(1, activeQuery, filters, normalized);
   };
 
   const handleDeleteRecent = async (id) => {
@@ -142,13 +227,30 @@ function SearchResultsGridInner() {
     setFilters({
       minPrice: 0,
       maxPrice: 10000,
-      maxDistance: 5,
+      maxDistance: 1000,
       inStockOnly: true,
       deliveryOnly: false,
-      minRating: 4.5,
+      minRating: 0,
       sortBy: "relevance",
     });
   };
+
+  const addProductToCart = (item) => addToCart({
+    id: item.id,
+    cartItemId: `${item.pharmacyId}-${item.id}`,
+    productId: item.id,
+    name: item.name,
+    price: item.price,
+    quantity: 1,
+    image: item.image,
+    category: item.category,
+    pharmacyId: item.pharmacyId,
+    pharmacyName: item.pharmacyName,
+    timing: item.timing,
+    deliveryCharge: item.deliveryCharge,
+    deliveryType: item.deliveryType,
+    taxRate: item.taxRate,
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -186,6 +288,9 @@ function SearchResultsGridInner() {
             </button>
           </div>
         </div>
+
+        {locationReady && <SearchDeliveryLocation value={destination} onChange={handleDestinationChange} />}
+        {activeQuery && <OptimalPharmacyCard item={optimalPharmacy} destination={destination} onAdd={addProductToCart} loading={loading} />}
 
         <div className="flex flex-wrap items-center justify-center gap-3 mt-4 text-sm">
           <span className="text-gray-500 font-medium">Recent Searches:</span>
@@ -255,9 +360,11 @@ function SearchResultsGridInner() {
                   onChange={(e) => setFilters((prev) => ({ ...prev, maxDistance: Number(e.target.value) }))}
                   className="w-full appearance-none border border-gray-200 rounded-lg py-2.5 pl-4 pr-10 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value={3}>Within 5 km</option>
-                  <option value={6}>Within 10 km</option>
-                  <option value={1000}>Any distance</option>
+                  <option value={5}>Within 5 km</option>
+                  <option value={10}>Within 10 km</option>
+                  <option value={25}>Within 25 km</option>
+                  <option value={50}>Within 50 km</option>
+                  <option value={1000}>All distances</option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
               </div>
@@ -408,7 +515,7 @@ function SearchResultsGridInner() {
             {loading && <p className="text-gray-500 text-sm">Loading results...</p>}
             {!loading && results.length === 0 && <p className="text-gray-500">No medicines match your filters.</p>}
             {results.map((item) => (
-              <div key={item.id} className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col md:flex-row gap-6 hover:shadow-sm transition-shadow">
+              <div key={item.id} className={`bg-white border rounded-xl p-4 flex flex-col md:flex-row gap-6 hover:shadow-sm transition-shadow ${item.deliveryStatus === "delivers" ? "border-emerald-200" : item.deliveryStatus === "closed" || item.deliveryStatus === "outside-radius" ? "border-amber-200" : "border-gray-200"}`}>
                 <div className="w-full md:w-32 h-32 bg-blue-50 rounded-lg flex items-center justify-center shrink-0 text-5xl">
                   {item.image || "💊"}
                 </div>
@@ -422,16 +529,17 @@ function SearchResultsGridInner() {
                       {item.stock > 0 ? "Available" : "Out of Stock"}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-500 mb-4">{item.category}</p>
+                  <p className="text-sm text-gray-500 mb-3">{item.category}</p>
+                  <div className="mb-3"><DeliveryBadge item={item} /></div>
 
-                  <div className="flex items-center gap-4 text-sm text-gray-600">
+                  <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
                     <div className="flex items-center gap-1">
                       <Star className="w-4 h-4 fill-orange-400 text-orange-400" />
-                      <span className="font-medium text-gray-900">{item.pharmacyRating}</span>
+                      <span className="font-medium text-gray-900">{item.pharmacyRating ?? "New"}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <MapPin className="w-4 h-4 text-gray-400" />
-                      <span>{item.pharmacyName} ({item.pharmacyDistance})</span>
+                      <span>{item.pharmacyName} ({item.distanceKm !== null ? `${Number(item.distanceKm).toFixed(1)} km away` : item.pharmacyDistance})</span>
                     </div>
                   </div>
                 </div>
@@ -441,24 +549,7 @@ function SearchResultsGridInner() {
                     <p className="text-xl font-bold text-blue-900">{formatPKR(item.price)}</p>
                   </div>
                   <button
-                    onClick={() =>
-                      addToCart({
-                        id: item.id,
-                        cartItemId: `${item.pharmacyId}-${item.id}`,
-                        productId: item.id,
-                        name: item.name,
-                        price: item.price,
-                        quantity: 1,
-                        image: item.image,
-                        category: item.category,
-                        pharmacyId: item.pharmacyId,
-                        pharmacyName: item.pharmacyName,
-                        timing: item.timing,
-                        deliveryCharge: item.deliveryCharge,
-                        deliveryType: item.deliveryType,
-                        taxRate: item.taxRate,
-                      })
-                    }
+                    onClick={() => addProductToCart(item)}
                     disabled={item.stock <= 0}
                     className={`w-full text-center py-2 px-4 rounded-lg text-sm font-medium transition-colors cursor-pointer ${item.stock > 0 ? "bg-blue-800 text-white hover:bg-blue-900" : "bg-gray-100 text-gray-500 cursor-not-allowed"}`}
                   >
