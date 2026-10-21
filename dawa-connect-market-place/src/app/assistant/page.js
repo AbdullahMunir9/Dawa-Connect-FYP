@@ -20,6 +20,27 @@ const SUGGESTIONS = [
   { icon: HelpCircle, title: "Using DawaConnect", prompt: "How do I track an order that was split between two pharmacies on DawaConnect?" },
 ];
 
+function displayMarkdown(content, streaming = false) {
+  let text = String(content || "")
+    .split("\n")
+    .flatMap((line) => {
+      const trimmed = line.trim();
+      if (/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(trimmed)) return [];
+      if (trimmed.startsWith("|")) {
+        const cells = trimmed.split("|").slice(1).map((cell) => cell.trim()).filter(Boolean);
+        if (!cells.length) return [];
+        return [`- ${cells.map((cell, index) => index === 0 ? `**${cell.replace(/^\*\*|\*\*$/g, "")}**` : cell).join(": ")}`];
+      }
+      return [line];
+    })
+    .join("\n");
+
+  // During character-by-character playback, close a temporarily incomplete
+  // bold marker so ReactMarkdown never exposes raw ** characters to the user.
+  if (streaming && (text.match(/\*\*/g) || []).length % 2 !== 0) text += "**";
+  return text;
+}
+
 function CopyButton({ text }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -255,10 +276,10 @@ export default function AssistantPage() {
                     <div className={cn("max-w-[85%] sm:max-w-[75%]", isUser ? "items-end" : "items-start")}>
                       <div className={cn("rounded-2xl px-4 py-3 text-[14px] leading-relaxed", isUser ? "rounded-tr-md bg-blue-700 text-white" : "rounded-tl-md border border-gray-200 bg-white text-gray-800 shadow-sm")}>
                         {isUser ? <p className="whitespace-pre-wrap">{msg.content}</p> : streaming ? (
-                          msg.content ? <p className="whitespace-pre-wrap">{msg.content}<span className="ml-0.5 inline-block h-4 w-0.5 translate-y-0.5 animate-pulse rounded-sm bg-blue-600" aria-hidden /></p>
+                          msg.content ? <div className="md-answer"><ReactMarkdown skipHtml>{displayMarkdown(msg.content, true)}</ReactMarkdown><span className="ml-0.5 inline-block h-4 w-0.5 translate-y-0.5 animate-pulse rounded-sm bg-blue-600" aria-hidden /></div>
                             : <span className="inline-flex items-center gap-1.5 text-gray-400"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" /></span>
                         ) : (
-                          <div className="md-answer"><ReactMarkdown>{msg.content}</ReactMarkdown></div>
+                          <div className="md-answer"><ReactMarkdown skipHtml>{displayMarkdown(msg.content)}</ReactMarkdown></div>
                         )}
                       </div>
                       {!isUser && !streaming && index > 0 && <div className="mt-1 flex justify-start"><CopyButton text={msg.content} /></div>}
