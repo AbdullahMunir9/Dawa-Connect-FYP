@@ -61,7 +61,8 @@ export default function OrderChatClient({ orderId }) {
           transports: ["polling", "websocket"],
           timeout: 20_000,
           reconnection: true,
-          reconnectionAttempts: 12,
+          reconnectionAttempts: 30,
+          reconnectionDelayMax: 5_000,
         });
         socketRef.current = socket;
 
@@ -89,7 +90,12 @@ export default function OrderChatClient({ orderId }) {
         socket.on("connect_error", (connectError) => {
           if (!cancelled) {
             setConnectionState("offline");
-            setError(connectError.message || "Unable to connect to live chat.");
+            const code = connectError?.data?.code;
+            setError(code === "CHAT_AUTH_FAILED"
+              ? "Your chat session expired. Refresh the page and try again."
+              : code === "CHAT_NOT_CONFIGURED"
+                ? "Live chat is not configured on the server."
+                : "The live chat server is waking up or temporarily unavailable. Reconnecting automatically…");
             setLoading(false);
           }
         });

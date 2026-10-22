@@ -251,7 +251,8 @@ async function requestPharmacyChatToken(sessionToken) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionToken }),
-      signal: AbortSignal.timeout(30_000)
+      // Render free instances can take 50+ seconds to wake from sleep.
+      signal: AbortSignal.timeout(75_000)
     })
   } catch (error) {
     if (error?.name === 'TimeoutError') throw new Error('Live chat authentication timed out. Please try again.')
@@ -718,6 +719,16 @@ app.whenReady().then(async () => {
   ipcMain.handle('chat:list-conversations', async () => {
     try {
       return { ok: true, data: await emitChatEvent('conversation:list') }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('chat:open-conversation', async (_event, payload) => {
+    try {
+      return { ok: true, data: await emitChatEvent('conversation:open-pharmacy', {
+        orderReference: payload?.orderReference
+      }) }
     } catch (error) {
       return { ok: false, error: error.message }
     }

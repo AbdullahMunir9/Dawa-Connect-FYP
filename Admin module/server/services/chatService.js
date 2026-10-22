@@ -126,9 +126,63 @@ export async function openOrderConversation(identity, orderId) {
           closedAt: writable ? null : new Date(),
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
     );
     if (!identityCanAccessConversation(identity, conversation)) throw new ChatError('You cannot access this conversation.', 403, 'FORBIDDEN');
+    return conversationView(conversation);
+  } catch (error) {
+    throw asChatError(error);
+  }
+}
+
+export async function openPharmacyOrderConversation(identity, orderReference) {
+  try {
+    if (identity.role !== 'pharmacy') {
+      throw new ChatError('Only a pharmacy can start this customer conversation.', 403, 'FORBIDDEN');
+    }
+    const reference = String(orderReference || '').trim().slice(0, 100);
+    if (!reference) throw new ChatError('An order reference is required.', 400, 'ORDER_REQUIRED');
+
+    const order = await Order.findOne({
+      $or: [
+        { orderId: reference },
+        { pharmacyOrderId: reference },
+        { fulfillments: { $elemMatch: { pharmacyOrderId: reference, pharmacyId: identity.sub } } },
+      ],
+    });
+    if (!order) throw new ChatError('Order not found.', 404, 'ORDER_NOT_FOUND');
+
+    const details = deriveOrderChatDetails(order);
+    if (String(details.pharmacyId) !== identity.sub) {
+      throw new ChatError('This order does not belong to your pharmacy.', 403, 'FORBIDDEN');
+    }
+
+    const writable = isChatWritableStatus(details.orderStatus);
+    if (!writable) {
+      throw new ChatError('Chat can only be started while an order is ongoing.', 409, 'CHAT_READ_ONLY');
+    }
+    const hasCustomerAccount = Boolean(order.userId && mongoose.isValidObjectId(order.userId));
+    const insert = {
+      marketplaceOrderId: order._id,
+      orderId: order.orderId,
+      pharmacyOrderId: details.pharmacyOrderId,
+      pharmacyId: details.pharmacyId,
+      pharmacyName: details.pharmacyName,
+      customerId: hasCustomerAccount ? new mongoose.Types.ObjectId(order.userId) : null,
+      guestParticipantId: hasCustomerAccount ? '' : `guest:${String(order._id)}`,
+      customerName: order.deliveryAddress?.fullName || (hasCustomerAccount ? 'Customer' : 'Guest customer'),
+    };
+    const conversation = await ChatConversation.findOneAndUpdate(
+      { marketplaceOrderId: order._id },
+      {
+        $setOnInsert: insert,
+        $set: { orderStatus: details.orderStatus, status: 'active', closedReason: '', closedAt: null },
+      },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
+    );
+    if (!identityCanAccessConversation(identity, conversation)) {
+      throw new ChatError('You cannot access this conversation.', 403, 'FORBIDDEN');
+    }
     return conversationView(conversation);
   } catch (error) {
     throw asChatError(error);

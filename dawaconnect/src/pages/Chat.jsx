@@ -15,7 +15,7 @@ const formatRelative = (value) => {
   return `${Math.floor(minutes / 1440)}d ago`
 }
 
-export default function ChatPage() {
+export default function ChatPage({ chatNavigation }) {
   const { showToast } = useApp()
   const [conversations, setConversations] = useState([])
   const [activeId, setActiveId] = useState('')
@@ -27,6 +27,7 @@ export default function ChatPage() {
   const [error, setError] = useState('')
   const messagesRef = useRef(null)
   const activeIdRef = useRef('')
+  const handledNavigationRef = useRef(0)
 
   const active = useMemo(() => conversations.find((conversation) => conversation.id === activeId) || null, [conversations, activeId])
 
@@ -92,6 +93,35 @@ export default function ChatPage() {
       unsubscribe?.()
     }
   }, [loadConversations])
+
+  useEffect(() => {
+    const nonce = Number(chatNavigation?.nonce || 0)
+    const orderReference = String(chatNavigation?.orderReference || '')
+    if (connection !== 'connected' || !nonce || !orderReference || handledNavigationRef.current === nonce) return
+    handledNavigationRef.current = nonce
+    let activeEffect = true
+    const openFromOrder = async () => {
+      setLoading(true)
+      setError('')
+      const result = await window.electronAPI.chat.openConversation({ orderReference })
+      if (!activeEffect) return
+      if (!result.ok) {
+        setError(result.error || 'The customer conversation could not be opened.')
+        setLoading(false)
+        return
+      }
+      try {
+        await loadConversations()
+        if (activeEffect) setActiveId(result.data.id)
+      } catch (loadError) {
+        if (activeEffect) setError(loadError.message)
+      } finally {
+        if (activeEffect) setLoading(false)
+      }
+    }
+    void openFromOrder()
+    return () => { activeEffect = false }
+  }, [chatNavigation, connection, loadConversations])
 
   useEffect(() => {
     let activeEffect = true
@@ -165,7 +195,7 @@ export default function ChatPage() {
           </div>
           <div style={{ overflowY: 'auto', flex: 1 }}>
             {loading && <div className="empty-state"><p>Connecting to live chat…</p></div>}
-            {!loading && conversations.length === 0 && <div className="empty-state"><p>No customer has started an order chat yet.</p></div>}
+            {!loading && conversations.length === 0 && <div className="empty-state"><p>No order conversations yet. Open an ongoing Marketplace order and choose Chat.</p></div>}
             {conversations.map((conversation) => (
               <button key={conversation.id} type="button" onClick={() => setActiveId(conversation.id)} style={{ width: '100%', border: 0, borderBottom: '1px solid #f1f5f9', borderLeft: activeId === conversation.id ? '4px solid #0d9488' : '4px solid transparent', padding: '15px 16px', background: activeId === conversation.id ? '#f0fdfa' : '#fff', textAlign: 'left', cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>

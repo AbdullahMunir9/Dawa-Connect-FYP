@@ -10,8 +10,9 @@ const NEXT_STATUS = {
   Delivered: [],
   Cancelled: [],
 };
+const CHAT_STATUSES = new Set(['Pending', 'Confirmed', 'Packed', 'Dispatched']);
 
-export default function Orders({ orderNavigation }) {
+export default function Orders({ orderNavigation, onOpenChat }) {
   const { orders, updateOrderStatus, pharmacyProfile, user } = useApp();
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
@@ -137,6 +138,9 @@ export default function Orders({ orderNavigation }) {
                     <div style={{ display: 'flex', gap: 5 }}>
                       <button className="btn btn-secondary btn-xs" onClick={() => setSelectedOrder(order)}>View</button>
                       <button className="btn btn-outline btn-xs" onClick={() => setShowInvoice(order)}>Invoice</button>
+                      {order.source === 'marketplace' && CHAT_STATUSES.has(order.status) && (
+                        <button className="btn btn-primary btn-xs" onClick={() => onOpenChat?.(order)}>Chat</button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -196,7 +200,12 @@ export default function Orders({ orderNavigation }) {
               </table>
 
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: '#475569' }}>Update Status</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>Update Status</div>
+                  {selectedOrder.source === 'marketplace' && CHAT_STATUSES.has(selectedOrder.status) && (
+                    <button className="btn btn-secondary btn-sm" onClick={() => { onOpenChat?.(selectedOrder); setSelectedOrder(null); }}>💬 Chat with customer</button>
+                  )}
+                </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {(NEXT_STATUS[selectedOrder.status] || []).map(s => (
                     <button key={s} className={`btn btn-sm ${s === 'Cancelled' ? 'btn-danger' : 'btn-primary'}`} onClick={async () => { await updateOrderStatus(selectedOrder.id, s); setSelectedOrder(null); }}>→ {s}</button>

@@ -47,6 +47,7 @@ export default function App() {
   const [showRegister, setShowRegister] = useState(false);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const [orderNavigation, setOrderNavigation] = useState({ orderId: '', nonce: 0 });
+  const [chatNavigation, setChatNavigation] = useState({ orderReference: '', nonce: 0 });
 
   useEffect(() => {
     if (!window.electronAPI?.notifications?.onNavigate) return undefined;
@@ -84,11 +85,14 @@ export default function App() {
   const renderPage = () => {
     switch (page) {
       case 'dashboard': return <Dashboard />;
-      case 'orders': return <Orders orderNavigation={orderNavigation} />;
+      case 'orders': return <Orders orderNavigation={orderNavigation} onOpenChat={(order) => {
+        setChatNavigation({ orderReference: String(order.customerOrderId || order.id || ''), nonce: Date.now() });
+        setPage('chat');
+      }} />;
       case 'inventory': return <Inventory />;
       case 'analytics': return <Analytics />;
       case 'returns': return <ReturnsPage />;
-      case 'chat': return <ChatPage />;
+      case 'chat': return <ChatPage chatNavigation={chatNavigation} />;
       case 'complaints': return <Complaints />;
       case 'reviews': return <ReviewsPage />;
       case 'notifications': return <NotificationsPage />;
