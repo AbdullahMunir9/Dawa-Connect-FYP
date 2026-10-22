@@ -61,6 +61,7 @@ export function configureChatSocket(io) {
     socket.on('conversation:open', ({ orderId } = {}, ack) => reply(ack, async () => {
       const conversation = await openOrderConversation(identity, orderId);
       await socket.join(conversationRoom(conversation.id));
+      io.to(`pharmacy:${conversation.pharmacyId}`).emit('conversation:updated', conversation);
       return conversation;
     }));
 

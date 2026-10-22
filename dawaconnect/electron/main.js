@@ -25,6 +25,7 @@ import {
   createCollectionItem,
   updateCollectionItem,
   removeCollectionItem,
+  markAllNotificationsRead,
   getProfile,
   upsertProfile,
   uploadProfilePhoto,
@@ -48,6 +49,7 @@ const applicationIconPath = () => app.isPackaged
 let chatSocket = null
 let chatSessionToken = ''
 let chatTokenRefreshTimer = null
+let chatConnectPromise = null
 const registrationPhotoSelections = new Map()
 let mainWindow = null
 let tray = null
@@ -243,11 +245,18 @@ function broadcastChatEvent(type, data) {
 }
 
 async function requestPharmacyChatToken(sessionToken) {
-  const response = await fetch(`${chatServiceUrl}/api/chat/auth/pharmacy`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionToken })
-  })
+  let response
+  try {
+    response = await fetch(`${chatServiceUrl}/api/chat/auth/pharmacy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionToken }),
+      signal: AbortSignal.timeout(30_000)
+    })
+  } catch (error) {
+    if (error?.name === 'TimeoutError') throw new Error('Live chat authentication timed out. Please try again.')
+    throw new Error('Could not reach the live chat service. Check your internet connection.')
+  }
   const data = await response.json().catch(() => ({}))
   if (!response.ok || !data.token) throw new Error(data.message || 'Could not authenticate with live chat.')
   return data.token
@@ -260,59 +269,82 @@ function disconnectPharmacyChat() {
   chatSocket?.disconnect()
   chatSocket = null
   chatSessionToken = ''
+  chatConnectPromise = null
 }
 
 async function connectPharmacyChat(sessionToken) {
   const normalizedToken = String(sessionToken || '').trim()
   if (!normalizedToken) throw new Error('Your pharmacy session is missing. Sign in again.')
   if (chatSocket?.connected && chatSessionToken === normalizedToken) return { connected: true, serviceUrl: chatServiceUrl }
+  if (chatConnectPromise && chatSessionToken === normalizedToken) return chatConnectPromise
 
   disconnectPharmacyChat()
   chatSessionToken = normalizedToken
-  const token = await requestPharmacyChatToken(normalizedToken)
-  const socket = io(chatServiceUrl, {
-    auth: { token },
-    transports: ['websocket', 'polling'],
-    reconnection: true,
-    reconnectionAttempts: 20
-  })
-  chatSocket = socket
-
-  socket.on('connect', () => broadcastChatEvent('connection', { state: 'connected' }))
-  socket.on('disconnect', () => broadcastChatEvent('connection', { state: 'reconnecting' }))
-  socket.on('connect_error', (error) => broadcastChatEvent('connection', { state: 'offline', error: error.message }))
-  socket.on('message:new', (data) => broadcastChatEvent('message:new', data))
-  socket.on('conversation:updated', (data) => broadcastChatEvent('conversation:updated', data))
-  socket.on('notification:new', (data) => void handleRealtimeNotification(data))
-  socket.on('notification:sync', (data) => void handleNotificationSync(data))
-
-  chatTokenRefreshTimer = setInterval(async () => {
-    try {
-      const refreshedToken = await requestPharmacyChatToken(chatSessionToken)
-      if (chatSocket) chatSocket.auth = { token: refreshedToken }
-    } catch (error) {
-      broadcastChatEvent('connection', { state: 'offline', error: error.message })
-    }
-  }, 12 * 60 * 1000)
-
-  if (socket.connected) return { connected: true, serviceUrl: chatServiceUrl }
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Live chat connection timed out.')), 12_000)
-    socket.once('connect', () => {
-      clearTimeout(timeout)
-      resolve({ connected: true, serviceUrl: chatServiceUrl })
+  const pendingConnection = (async () => {
+    const token = await requestPharmacyChatToken(normalizedToken)
+    const socket = io(chatServiceUrl, {
+      auth: { token },
+      // Polling works through more hosting proxies; Socket.IO upgrades to
+      // WebSocket automatically after the authenticated handshake.
+      transports: ['polling', 'websocket'],
+      timeout: 20_000,
+      reconnection: true,
+      reconnectionAttempts: 20
     })
-    socket.once('connect_error', (error) => {
-      clearTimeout(timeout)
-      reject(error)
+    chatSocket = socket
+
+    socket.on('connect', () => broadcastChatEvent('connection', { state: 'connected' }))
+    socket.on('disconnect', () => broadcastChatEvent('connection', { state: 'reconnecting' }))
+    socket.on('connect_error', (error) => {
+      const message = error?.data?.code === 'CHAT_AUTH_FAILED'
+        ? 'Your live chat session expired. Sign in again.'
+        : error?.data?.code === 'CHAT_NOT_CONFIGURED'
+          ? 'Live chat is not configured on the server.'
+          : 'Live chat is temporarily unreachable. Retrying…'
+      broadcastChatEvent('connection', { state: 'offline', error: message })
     })
-  })
+    socket.on('message:new', (data) => broadcastChatEvent('message:new', data))
+    socket.on('conversation:updated', (data) => broadcastChatEvent('conversation:updated', data))
+    socket.on('notification:new', (data) => void handleRealtimeNotification(data))
+    socket.on('notification:sync', (data) => void handleNotificationSync(data))
+
+    chatTokenRefreshTimer = setInterval(async () => {
+      try {
+        const refreshedToken = await requestPharmacyChatToken(chatSessionToken)
+        if (chatSocket) chatSocket.auth = { token: refreshedToken }
+      } catch (error) {
+        broadcastChatEvent('connection', { state: 'offline', error: error.message })
+      }
+    }, 12 * 60 * 1000)
+
+    if (socket.connected) return { connected: true, serviceUrl: chatServiceUrl }
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Live chat connection timed out. Please try again.')), 25_000)
+      socket.once('connect', () => {
+        clearTimeout(timeout)
+        resolve({ connected: true, serviceUrl: chatServiceUrl })
+      })
+      socket.once('connect_error', (error) => {
+        if (!['CHAT_AUTH_FAILED', 'CHAT_NOT_CONFIGURED'].includes(error?.data?.code)) return
+        clearTimeout(timeout)
+        reject(new Error(error?.data?.code === 'CHAT_NOT_CONFIGURED'
+          ? 'Live chat is not configured on the server.'
+          : 'Your live chat session expired. Sign in again.'))
+      })
+    })
+  })()
+  chatConnectPromise = pendingConnection
+  try {
+    return await pendingConnection
+  } finally {
+    if (chatConnectPromise === pendingConnection) chatConnectPromise = null
+  }
 }
 
 function emitChatEvent(event, payload = {}) {
   if (!chatSocket?.connected) return Promise.reject(new Error('Live chat is offline. Reconnect and try again.'))
   return new Promise((resolve, reject) => {
-    chatSocket.timeout(12_000).emit(event, payload, (timeoutError, response) => {
+    chatSocket.timeout(20_000).emit(event, payload, (timeoutError, response) => {
       if (timeoutError) return reject(new Error('The chat service did not respond.'))
       if (!response?.ok) return reject(Object.assign(new Error(response?.error || 'Chat request failed.'), { code: response?.code }))
       return resolve(response.data)
@@ -587,6 +619,14 @@ app.whenReady().then(async () => {
     try {
       const data = await removeCollectionItem(payload.entity, payload.ownerId, payload.id)
       return { ok: true, data }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('notifications:mark-all-read', async () => {
+    try {
+      return { ok: true, data: await markAllNotificationsRead() }
     } catch (error) {
       return { ok: false, error: error.message }
     }

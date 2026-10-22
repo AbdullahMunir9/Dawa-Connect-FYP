@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getPreferences: () => ipcRenderer.invoke('notifications:preferences-get'),
     updatePreferences: (payload) => ipcRenderer.invoke('notifications:preferences-update', payload),
     show: (payload) => ipcRenderer.invoke('notifications:show', payload),
+    markAllRead: () => ipcRenderer.invoke('notifications:mark-all-read'),
     setUnreadCount: (count) => ipcRenderer.invoke('notifications:unread-count', { count }),
     onEvent: (callback) => {
       const listener = (_event, payload) => callback(payload)

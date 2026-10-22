@@ -41,7 +41,7 @@ const PAGE_TITLES = {
 };
 
 export default function App() {
-  const { user, logout, unreadCount, notifications, markAllNotificationsRead, toasts, pharmacyProfile, orders, openComplaintCount } = useApp();
+  const { user, logout, unreadCount, chatUnreadCount, notifications, markAllNotificationsRead, toasts, pharmacyProfile, orders, openComplaintCount } = useApp();
   const [page, setPage] = useState('dashboard');
   const [walkthroughDone, setWalkthroughDone] = useState(() => localStorage.getItem('onboardingDone') === '1');
   const [showRegister, setShowRegister] = useState(false);
@@ -129,8 +129,8 @@ export default function App() {
                   {item.badge && item.id === 'notifications' && unreadCount > 0 && (
                     <span className="nav-badge">{unreadCount}</span>
                   )}
-                  {item.badge && item.id === 'chat' && (
-                    <span className="nav-badge">3</span>
+                  {item.badge && item.id === 'chat' && chatUnreadCount > 0 && (
+                    <span className="nav-badge">{chatUnreadCount}</span>
                   )}
                   {item.badge && item.id === 'complaints' && openComplaintCount > 0 && (
                     <span className="nav-badge">{openComplaintCount}</span>

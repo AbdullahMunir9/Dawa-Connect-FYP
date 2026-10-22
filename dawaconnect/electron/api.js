@@ -178,6 +178,10 @@ export function removeCollectionItem(entity, _ownerId, id) {
   return apiRequest(`/pharmacy/entities/${encodeURIComponent(entity)}/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+export function markAllNotificationsRead() {
+  return apiRequest('/pharmacy/notifications/read-all', { method: 'PATCH' });
+}
+
 export function getProfile() {
   return apiRequest('/pharmacy/profile');
 }

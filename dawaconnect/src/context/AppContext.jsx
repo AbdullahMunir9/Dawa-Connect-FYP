@@ -24,11 +24,13 @@ export const AppProvider = ({ children }) => {
   const [reviews, setReviews] = useState([])
   const [returns, setReturns] = useState([])
   const [notifications, setNotifications] = useState([])
+  const [chatUnreadCount, setChatUnreadCount] = useState(0)
   const [complaints, setComplaints] = useState({ inbox: [], outbox: [] })
   const [toasts, setToasts] = useState([])
   const [authLoading, setAuthLoading] = useState(true)
   const notificationIdsRef = useRef(new Set())
   const notificationsReadyRef = useRef(false)
+  const notificationReadOverridesRef = useRef(new Set())
   const [pharmacyProfile, setPharmacyProfileState] = useState({
     name: 'My Pharmacy',
     address: '',
@@ -54,10 +56,14 @@ export const AppProvider = ({ children }) => {
   }, [])
 
   const syncNotifications = useCallback((rows) => {
-    const mapped = rows.map((notification) => ({
-      ...mapDoc(notification),
-      time: formatRelativeTime(notification.createdAt)
-    }))
+    const mapped = rows.map((notification) => {
+      const item = mapDoc(notification)
+      return {
+        ...item,
+        read: Boolean(item.read) || notificationReadOverridesRef.current.has(String(item.id)),
+        time: formatRelativeTime(notification.createdAt)
+      }
+    })
     const newOrderNotifications = notificationsReadyRef.current
       ? mapped.filter((notification) => notification.type === 'order' && !notificationIdsRef.current.has(String(notification.id)))
       : []
@@ -221,6 +227,34 @@ export const AppProvider = ({ children }) => {
   }, [user?.id, syncNotifications, showToast])
 
   useEffect(() => {
+    if (!user?.id || !window.electronAPI?.chat) {
+      setChatUnreadCount(0)
+      return undefined
+    }
+    let active = true
+    const refreshUnreadChats = async () => {
+      const connected = await window.electronAPI.chat.connect()
+      if (!active || !connected.ok) return
+      const result = await window.electronAPI.chat.listConversations()
+      if (!active || !result.ok) return
+      setChatUnreadCount((result.data || []).reduce(
+        (total, conversation) => total + Number(conversation.pharmacyUnreadCount || 0),
+        0,
+      ))
+    }
+    const unsubscribe = window.electronAPI.chat.onEvent(({ type, data }) => {
+      if (!active) return
+      if (type === 'connection' && data?.state === 'connected') void refreshUnreadChats()
+      if (type === 'message:new' || type === 'conversation:updated') void refreshUnreadChats()
+    })
+    void refreshUnreadChats()
+    return () => {
+      active = false
+      unsubscribe?.()
+    }
+  }, [user?.id])
+
+  useEffect(() => {
     void window.electronAPI?.notifications?.setUnreadCount(notifications.filter((item) => !item.read).length)
   }, [notifications])
 
@@ -334,17 +368,21 @@ export const AppProvider = ({ children }) => {
   }
 
   const markAllNotificationsRead = async () => {
-    if (!user?.id) return
+    if (!user?.id) return { ok: false }
     const unread = notifications.filter((n) => !n.read)
-    await Promise.all(
-      unread.map((n) => window.electronAPI.entity.update({
-        entity: 'notifications',
-        ownerId: user.id,
-        id: n.id,
-        updates: { read: true }
-      }))
-    )
+    if (!unread.length) return { ok: true }
+    notificationReadOverridesRef.current = new Set(unread.map((notification) => String(notification.id)))
     setNotifications((p) => p.map((n) => ({ ...n, read: true })))
+    const result = await window.electronAPI.notifications.markAllRead()
+    if (!result.ok) {
+      notificationReadOverridesRef.current.clear()
+      await fetchEntity('notifications', String(user.id), setNotifications)
+      showToast(result.error || 'Notifications could not be marked as read.', 'error')
+      return result
+    }
+    await fetchEntity('notifications', String(user.id), setNotifications)
+    notificationReadOverridesRef.current.clear()
+    return result
   }
 
   const updateOrderStatus = async (id, status) => {
@@ -519,7 +557,7 @@ export const AppProvider = ({ children }) => {
       complaints, fileComplaint, replyToComplaint, setComplaintStatus, openComplaintCount,
       toasts, showToast,
       pharmacyProfile, setPharmacyProfile, uploadPharmacyPhoto, removePharmacyPhoto,
-      unreadCount, lowStockItems, expiringItems,
+      unreadCount, chatUnreadCount, lowStockItems, expiringItems,
       salesData, monthlyData
     }}>
       {children}

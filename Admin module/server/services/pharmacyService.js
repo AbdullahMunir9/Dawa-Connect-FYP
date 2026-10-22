@@ -726,6 +726,16 @@ export async function updateEntity(ownerId, entity, id, changes) {
   return mapDoc(updated);
 }
 
+export async function markAllNotificationsRead(ownerId) {
+  const db = await pharmacyDatabase();
+  const now = new Date();
+  const result = await db.collection('notifications').updateMany(
+    { ownerId: String(ownerId), read: { $ne: true } },
+    { $set: { read: true, updatedAt: now } },
+  );
+  return { modifiedCount: result.modifiedCount, updatedAt: now };
+}
+
 export async function deleteEntity(ownerId, entity, id) {
   assertEntity(entity, 'delete');
   const db = await pharmacyDatabase();

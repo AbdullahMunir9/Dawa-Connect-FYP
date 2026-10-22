@@ -38,6 +38,7 @@ export default function ChatPage() {
     const result = await window.electronAPI.chat.listConversations()
     if (!result.ok) throw new Error(result.error || 'Could not load conversations.')
     const rows = result.data || []
+    setError('')
     setConversations(rows)
     setActiveId((current) => rows.some((row) => row.id === current) ? current : (rows[0]?.id || ''))
     return rows
@@ -49,7 +50,8 @@ export default function ChatPage() {
       if (!activeEffect) return
       if (type === 'connection') {
         setConnection(data?.state || 'offline')
-        if (data?.error) setError(data.error)
+        if (data?.state === 'connected') setError('')
+        else if (data?.error) setError(data.error)
       }
       if (type === 'message:new') {
         setConversations((current) => current.map((item) => item.id === data?.conversation?.id ? { ...item, ...data.conversation } : item))
@@ -62,6 +64,7 @@ export default function ChatPage() {
       }
       if (type === 'conversation:updated') {
         setConversations((current) => current.map((item) => item.id === data?.id ? { ...item, ...data } : item))
+        void loadConversations().catch(() => {})
       }
     })
 

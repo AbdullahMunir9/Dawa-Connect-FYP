@@ -56,7 +56,10 @@ export default function OrderChatClient({ orderId }) {
         if (cancelled) return;
         const socket = io(credentials.serviceUrl, {
           auth: { token: credentials.token },
-          transports: ["websocket", "polling"],
+          // Start with HTTP long-polling, which works reliably through Vercel,
+          // DNS proxies and Render, then let Socket.IO upgrade to WebSocket.
+          transports: ["polling", "websocket"],
+          timeout: 20_000,
           reconnection: true,
           reconnectionAttempts: 12,
         });

@@ -4,7 +4,7 @@ import {
   confirmPharmacyLocation, createComplaint, createEntity, createProduct, deleteEntity, deleteProduct,
   getProfile, listComplaints, listEntity, listProducts, locationConfigured, loginPharmacy, logoutPharmacy,
   registrationAvailability, registerPharmacy, resendRegistrationOtp, replyComplaint, requestPasswordReset, resetPassword,
-  searchPharmacyLocation, updateComplaintStatus, updateEntity, updateProduct, updateProfile,
+  searchPharmacyLocation, updateComplaintStatus, updateEntity, updateProduct, updateProfile, markAllNotificationsRead,
   verifyPharmacyRegistration,
 } from '../services/pharmacyService.js';
 import { removeProfilePhoto, uploadProfilePhoto, uploadRegistrationPhoto } from '../services/pharmacyPhotoService.js';
@@ -55,6 +55,7 @@ router.get('/entities/:entity', asyncRoute(async (req) => listEntity(req.pharmac
 router.post('/entities/:entity', asyncRoute(async (req) => createEntity(req.pharmacyAuth.ownerId, req.params.entity, req.body)));
 router.patch('/entities/:entity/:id', asyncRoute(async (req) => updateEntity(req.pharmacyAuth.ownerId, req.params.entity, req.params.id, req.body)));
 router.delete('/entities/:entity/:id', asyncRoute(async (req) => deleteEntity(req.pharmacyAuth.ownerId, req.params.entity, req.params.id)));
+router.patch('/notifications/read-all', asyncRoute(async (req) => markAllNotificationsRead(req.pharmacyAuth.ownerId)));
 
 router.get('/profile', asyncRoute(async (req) => getProfile(req.pharmacyAuth.ownerId)));
 router.put('/profile', asyncRoute(async (req) => updateProfile(req.pharmacyAuth.ownerId, req.body)));
