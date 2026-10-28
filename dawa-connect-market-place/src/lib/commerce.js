@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import mongoose from "mongoose";
 import { getCommerceDatabases } from "@/lib/pharmacyCatalog";
 import { assessPharmacyDelivery } from "@/lib/deliveryRanking.mjs";
@@ -64,6 +64,7 @@ function normalizeDeliveryAddress(address) {
     phone: 30,
     line1: 200,
     line2: 200,
+    area: 100,
     city: 100,
     province: 100,
     postalCode: 30,
@@ -208,6 +209,7 @@ export async function createCommerceOrder({
       const productsById = new Map(products.map((product) => [String(product._id), product]));
       const pharmacyUsersById = new Map(pharmacyUsers.map((pharmacy) => [String(pharmacy._id), pharmacy]));
       const grouped = new Map();
+      const stockMovements = [];
 
       for (const requested of requestedItems) {
         const product = productsById.get(requested.productId);
@@ -229,6 +231,16 @@ export async function createCommerceOrder({
         if (reserved.modifiedCount !== 1) {
           throw new CommerceError(`Stock for ${product.name} changed while you were checking out`, 409, "STOCK_CHANGED");
         }
+        stockMovements.push({
+          ownerId: requested.pharmacyId,
+          productId: requested.productId,
+          productName: product.name || "Medicine",
+          type: "order_reserved",
+          quantityChange: -requested.quantity,
+          stockBefore: Number(product.stock || 0),
+          stockAfter: Number(product.stock || 0) - requested.quantity,
+          source: "marketplace",
+        });
 
         const group = grouped.get(requested.pharmacyId) || { items: [], subtotal: 0 };
         const price = money(product.price || 0);
@@ -348,6 +360,16 @@ export async function createCommerceOrder({
 
       await marketplaceDb.collection("orders").insertOne(createdOrder, { session });
       await pharmacyDb.collection("orders").insertMany(pharmacyOrders, { session });
+      if (stockMovements.length) {
+        await pharmacyDb.collection("inventoryMovements").insertMany(stockMovements.map((movement) => ({
+          ...movement,
+          movementId: randomUUID(),
+          referenceId: orderId,
+          reason: "Stock reserved when the marketplace checkout was completed.",
+          deduplicationKey: `order_reserved:${orderId}:${movement.productId}`,
+          createdAt: now,
+        })), { session });
+      }
       await pharmacyDb.collection("notifications").insertMany(pharmacyOrders.map((order) => ({
         ownerId: order.ownerId,
         type: "order",

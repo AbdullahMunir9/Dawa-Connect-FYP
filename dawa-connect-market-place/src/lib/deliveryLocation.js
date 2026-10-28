@@ -9,6 +9,7 @@ export function normalizeDeliveryLocation(value) {
     id: String(value?.id || 'selected-location').slice(0, 1000),
     label: String(value?.label || 'Selected delivery location').trim().slice(0, 600),
     line1: String(value?.line1 || value?.label || '').trim().slice(0, 200),
+    area: String(value?.area || '').trim().slice(0, 100),
     city: String(value?.city || '').trim().slice(0, 100),
     province: String(value?.province || '').trim().slice(0, 100),
     postalCode: String(value?.postalCode || '').trim().slice(0, 30),

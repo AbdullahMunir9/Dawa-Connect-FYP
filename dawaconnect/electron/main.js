@@ -21,6 +21,11 @@ import {
   createProduct,
   updateProduct,
   removeProduct,
+  getPharmacyAnalytics,
+  listAnalyticsSnapshots,
+  finalizeAnalyticsSnapshot,
+  getAnalyticsNarrative,
+  generateAnalyticsNarrative,
   listCollection,
   createCollectionItem,
   updateCollectionItem,
@@ -584,6 +589,47 @@ app.whenReady().then(async () => {
     try {
       const data = await removeProduct(payload.ownerId, payload.id)
       return { ok: true, data }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('analytics:get', async (_event, payload) => {
+    try {
+      const data = await getPharmacyAnalytics(payload?.month)
+      return { ok: true, data }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('analytics:snapshots-list', async () => {
+    try {
+      return { ok: true, data: await listAnalyticsSnapshots() }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('analytics:snapshot-finalize', async (_event, payload) => {
+    try {
+      return { ok: true, data: await finalizeAnalyticsSnapshot(payload?.month) }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('analytics:narrative-get', async (_event, payload) => {
+    try {
+      return { ok: true, data: await getAnalyticsNarrative(payload?.month) }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('analytics:narrative-generate', async (_event, payload) => {
+    try {
+      return { ok: true, data: await generateAnalyticsNarrative(payload?.month, payload?.force === true) }
     } catch (error) {
       return { ok: false, error: error.message }
     }

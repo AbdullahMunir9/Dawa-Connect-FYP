@@ -1,6 +1,6 @@
 {
   "name": "dawaconnect",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "DawaConnect - Pharmacy Management Module (FYP)",
   "main": "out/main/main.js",
   "private": true,

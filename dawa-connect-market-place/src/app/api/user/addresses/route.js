@@ -68,6 +68,7 @@ export async function POST(req) {
       phone: body.phone,
       line1: body.line1,
       line2: body.line2 || "",
+      area: String(body.area || "").trim().slice(0, 100),
       city: body.city,
       province: body.province || "",
       postalCode: body.postalCode || "",

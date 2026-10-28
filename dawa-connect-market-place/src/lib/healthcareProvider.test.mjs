@@ -127,6 +127,7 @@ test('delivery location search accepts precise Pakistani addresses and returns o
       feature('home', {
         formatted: '12 Main Boulevard, Gulberg, Lahore, Pakistan',
         address_line1: '12 Main Boulevard',
+        suburb: 'Gulberg',
         city: 'Lahore',
         state: 'Punjab',
         postcode: '54660',
@@ -143,6 +144,7 @@ test('delivery location search accepts precise Pakistani addresses and returns o
     id: 'geoapify:home',
     label: '12 Main Boulevard, Gulberg, Lahore, Pakistan',
     line1: '12 Main Boulevard',
+    area: 'Gulberg',
     city: 'Lahore',
     province: 'Punjab',
     postalCode: '54660',
@@ -162,6 +164,7 @@ test('reverse delivery lookup uses the selected coordinates and returns a normal
   assert.equal(requested.searchParams.get('lat'), '31.52');
   assert.equal(requested.searchParams.get('lon'), '74.35');
   assert.equal(location.line1, 'Current Road');
+  assert.equal(location.area, '');
   assert.equal(location.city, 'Lahore');
 });
 

@@ -3,7 +3,8 @@ import mongoose from 'mongoose';
 // Read-only mirror of the Marketplace master order. The Marketplace owns writes.
 const addressSchema = new mongoose.Schema({
   label: String, fullName: String, phone: String, line1: String, line2: String,
-  city: String, province: String, postalCode: String,
+  area: String, city: String, province: String, postalCode: String,
+  latitude: Number, longitude: Number,
 }, { _id: false });
 
 const orderItemSchema = new mongoose.Schema({

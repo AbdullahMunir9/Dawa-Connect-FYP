@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "node server/index.js",
-    "test:chat": "node --test server/services/chatPolicy.test.js server/middleware/chatAuth.test.js"
+    "test:chat": "node --test server/services/chatPolicy.test.js server/middleware/chatAuth.test.js",
+    "test:analytics": "node --test server/services/analyticsCore.test.js server/services/analyticsNarrativeCore.test.js server/services/analyticsNarrativeProvider.test.js server/services/cityOpportunityCore.test.js server/services/forecastingCore.test.js server/services/inventoryMovement.test.js"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.4",

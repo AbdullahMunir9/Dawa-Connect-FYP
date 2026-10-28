@@ -78,6 +78,9 @@ function normalizeLocation(feature) {
     id: `geoapify:${placeId}`,
     label,
     line1: text(properties?.address_line1, 200) || label,
+    area: text(properties?.suburb, 100) || text(properties?.district, 100) ||
+      text(properties?.city_district, 100) || text(properties?.neighbourhood, 100) ||
+      text(properties?.quarter, 100),
     city: text(properties?.city, 100) || text(properties?.town, 100) || text(properties?.county, 100),
     province: text(properties?.state, 100),
     postalCode: text(properties?.postcode, 30),

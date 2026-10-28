@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import pharmacyDb from '../db/pharmacyConnection.js';
 import { pharmacyView } from '../middleware/pharmacyAuth.js';
+import { insertInventoryMovement } from './inventoryMovement.js';
 
 const { ObjectId } = mongoose.Types;
 const MARKETPLACE_DB_NAME = process.env.MARKETPLACE_DB_NAME || 'MarketPlace';
@@ -44,6 +45,19 @@ export async function pharmacyDatabase() {
       pharmacyDb.collection(PRODUCTS_COLLECTION).createIndex({ ownerId: 1, name: 1 }),
       pharmacyDb.collection('orders').createIndex({ ownerId: 1, date: -1 }),
       pharmacyDb.collection('orders').createIndex({ marketplaceOrderId: 1, ownerId: 1 }),
+      pharmacyDb.collection('orders').createIndex({ status: 1, 'deliveryAddress.city': 1, createdAt: -1 }),
+      pharmacyDb.collection('inventoryMovements').createIndex({ ownerId: 1, createdAt: -1 }),
+      pharmacyDb.collection('inventoryMovements').createIndex({ ownerId: 1, productId: 1, createdAt: -1 }),
+      pharmacyDb.collection('inventoryMovements').createIndex({ deduplicationKey: 1 }, { unique: true, sparse: true }),
+      pharmacyDb.collection('analyticsMonthlySnapshots').createIndex(
+        { ownerId: 1, month: 1, calculationVersion: 1 }, { unique: true },
+      ),
+      pharmacyDb.collection('analyticsMonthlySnapshots').createIndex({ ownerId: 1, month: -1 }),
+      pharmacyDb.collection('analyticsNarrativeReports').createIndex(
+        { ownerId: 1, month: 1, calculationVersion: 1, promptVersion: 1, inputDigest: 1 },
+        { unique: true },
+      ),
+      pharmacyDb.collection('analyticsNarrativeReports').createIndex({ ownerId: 1, month: -1, generatedAt: -1 }),
       pharmacyDb.collection('staff').createIndex({ ownerId: 1, email: 1 }),
       pharmacyDb.collection('reviews').createIndex({ ownerId: 1, date: -1 }),
       pharmacyDb.collection('returns').createIndex({ ownerId: 1, date: -1 }),
@@ -594,19 +608,73 @@ export async function createProduct(ownerId, value) {
   const db = await pharmacyDatabase();
   const now = new Date();
   const doc = { ...cleanObject(value), ownerId, createdAt: now, updatedAt: now };
-  const result = await db.collection(PRODUCTS_COLLECTION).insertOne(doc);
-  return mapDoc({ ...doc, _id: result.insertedId });
+  const session = pharmacyDb.getClient().startSession();
+  let created;
+  try {
+    await session.withTransaction(async () => {
+      const result = await db.collection(PRODUCTS_COLLECTION).insertOne(doc, { session });
+      created = { ...doc, _id: result.insertedId };
+      const openingStock = Number(doc.stock || 0);
+      if (openingStock !== 0) {
+        await insertInventoryMovement(db, {
+          ownerId,
+          productId: result.insertedId,
+          productName: doc.name,
+          type: 'opening_balance',
+          quantityChange: openingStock,
+          stockBefore: 0,
+          stockAfter: openingStock,
+          source: 'pharmacy',
+          referenceId: String(result.insertedId),
+          reason: 'Opening stock recorded when the product was created.',
+        }, { session });
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+  return mapDoc(created);
 }
 
 export async function updateProduct(ownerId, id, value) {
   const db = await pharmacyDatabase();
   const _id = objectId(id, 'product');
   const updates = cleanObject(value, ['id']);
-  const result = await db.collection(PRODUCTS_COLLECTION).findOneAndUpdate(
-    { _id, ownerId }, { $set: { ...updates, updatedAt: new Date() } }, { returnDocument: 'after' },
-  );
-  if (!result) throw Object.assign(new Error('Product not found.'), { status: 404 });
-  return mapDoc(result);
+  const session = pharmacyDb.getClient().startSession();
+  let updated;
+  try {
+    await session.withTransaction(async () => {
+      const existing = await db.collection(PRODUCTS_COLLECTION).findOne({ _id, ownerId }, { session });
+      if (!existing) throw Object.assign(new Error('Product not found.'), { status: 404 });
+      updated = await db.collection(PRODUCTS_COLLECTION).findOneAndUpdate(
+        { _id, ownerId },
+        { $set: { ...updates, updatedAt: new Date() } },
+        { returnDocument: 'after', session },
+      );
+      if (!updated) throw Object.assign(new Error('Product was changed by another operation. Try again.'), { status: 409 });
+      if (Object.hasOwn(updates, 'stock')) {
+        const stockBefore = Number(existing.stock || 0);
+        const stockAfter = Number(updated.stock || 0);
+        if (stockBefore !== stockAfter) {
+          await insertInventoryMovement(db, {
+            ownerId,
+            productId: _id,
+            productName: updated.name || existing.name,
+            type: 'manual_adjustment',
+            quantityChange: stockAfter - stockBefore,
+            stockBefore,
+            stockAfter,
+            source: 'pharmacy',
+            referenceId: String(_id),
+            reason: 'Stock quantity changed from the Pharmacy inventory workspace.',
+          }, { session });
+        }
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+  return mapDoc(updated);
 }
 
 export async function deleteProduct(ownerId, id) {
@@ -668,11 +736,29 @@ async function updateOrderStatus(ownerId, id, nextStatus) {
       if (nextStatus === 'Cancelled' && order.inventoryReserved && !order.inventoryRestocked) {
         for (const item of order.items || []) {
           if (!ObjectId.isValid(String(item.productId))) continue;
-          await db.collection(PRODUCTS_COLLECTION).updateOne(
+          const quantity = Number(item.qty ?? item.quantity ?? 0);
+          if (!Number.isFinite(quantity) || quantity <= 0) continue;
+          const product = await db.collection(PRODUCTS_COLLECTION).findOneAndUpdate(
             { _id: new ObjectId(String(item.productId)), ownerId },
-            { $inc: { stock: Number(item.qty ?? item.quantity ?? 0) }, $set: { updatedAt: now } },
-            { session },
+            { $inc: { stock: quantity }, $set: { updatedAt: now } },
+            { session, returnDocument: 'after' },
           );
+          if (!product) continue;
+          const stockAfter = Number(product.stock || 0);
+          await insertInventoryMovement(db, {
+            ownerId,
+            productId: item.productId,
+            productName: product.name || item.name,
+            type: 'order_cancelled',
+            quantityChange: quantity,
+            stockBefore: stockAfter - quantity,
+            stockAfter,
+            source: 'marketplace',
+            referenceId: order.id || String(order._id),
+            reason: 'Reserved stock restored when the pharmacy cancelled the order.',
+            deduplicationKey: `order_cancelled:${order.id || order._id}:${item.productId}`,
+            createdAt: now,
+          }, { session });
         }
         patch.inventoryRestocked = true;
         patch.inventoryRestockedAt = now;

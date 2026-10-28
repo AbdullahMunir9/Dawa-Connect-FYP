@@ -24,6 +24,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     update: (payload) => ipcRenderer.invoke('products:update', payload),
     remove: (payload) => ipcRenderer.invoke('products:remove', payload)
   },
+  analytics: {
+    get: (payload) => ipcRenderer.invoke('analytics:get', payload),
+    listSnapshots: () => ipcRenderer.invoke('analytics:snapshots-list'),
+    finalizeSnapshot: (payload) => ipcRenderer.invoke('analytics:snapshot-finalize', payload),
+    getNarrative: (payload) => ipcRenderer.invoke('analytics:narrative-get', payload),
+    generateNarrative: (payload) => ipcRenderer.invoke('analytics:narrative-generate', payload)
+  },
   entity: {
     list: (payload) => ipcRenderer.invoke('entity:list', payload),
     create: (payload) => ipcRenderer.invoke('entity:create', payload),

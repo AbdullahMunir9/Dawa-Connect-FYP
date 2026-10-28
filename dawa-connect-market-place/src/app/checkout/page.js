@@ -16,6 +16,7 @@ const emptyManualAddress = {
   phone: "",
   line1: "",
   line2: "",
+  area: "",
   city: "",
   province: "",
   postalCode: "",
@@ -53,6 +54,7 @@ function CheckoutContent() {
     setManualAddress((current) => ({
       ...current,
       line1: current.line1 || location.line1 || location.label,
+      area: current.area || location.area,
       city: current.city || location.city,
       province: current.province || location.province,
       postalCode: current.postalCode || location.postalCode,
@@ -117,7 +119,7 @@ function CheckoutContent() {
       ...current,
       [field]: value,
       ...(["line1", "line2", "city", "province", "postalCode"].includes(field)
-        ? { latitude: null, longitude: null }
+        ? { area: "", latitude: null, longitude: null }
         : {}),
     }));
   };
@@ -145,6 +147,7 @@ function CheckoutContent() {
       setManualAddress((current) => ({
         ...current,
         line1: detectedAddress.line1 || current.line1,
+        area: detectedAddress.area || "",
         city: detectedAddress.city || current.city,
         province: detectedAddress.province || current.province,
         postalCode: detectedAddress.postalCode || current.postalCode,

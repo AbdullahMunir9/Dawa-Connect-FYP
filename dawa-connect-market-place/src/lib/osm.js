@@ -116,6 +116,7 @@ export const reverseGeocode = async (lat, lon) => {
 
   return {
     line1: [street, area].filter(Boolean).join(", ") || result.name || result.display_name,
+    area,
     city:
       address.city ||
       address.town ||

@@ -162,6 +162,30 @@ export function removeProduct(_ownerId, id) {
   return apiRequest(`/pharmacy/products/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+export function getPharmacyAnalytics(month) {
+  const query = month ? `?month=${encodeURIComponent(month)}` : '';
+  return apiRequest(`/pharmacy/analytics${query}`);
+}
+
+export function listAnalyticsSnapshots() {
+  return apiRequest('/pharmacy/analytics/snapshots');
+}
+
+export function finalizeAnalyticsSnapshot(month) {
+  return apiRequest(`/pharmacy/analytics/snapshots/${encodeURIComponent(month)}`, { method: 'POST' });
+}
+
+export function getAnalyticsNarrative(month) {
+  const query = month ? `?month=${encodeURIComponent(month)}` : '';
+  return apiRequest(`/pharmacy/analytics/narrative${query}`);
+}
+
+export function generateAnalyticsNarrative(month, force = false) {
+  return apiRequest('/pharmacy/analytics/narrative', {
+    method: 'POST', body: { month, force }, timeout: 45_000,
+  });
+}
+
 export function listCollection(entity) {
   return apiRequest(`/pharmacy/entities/${encodeURIComponent(entity)}`);
 }

@@ -87,6 +87,7 @@ const UserSchema = new mongoose.Schema(
         phone: { type: String, required: true, trim: true },
         line1: { type: String, required: true, trim: true },
         line2: { type: String, trim: true, default: "" },
+        area: { type: String, trim: true, default: "", maxlength: 100 },
         city: { type: String, required: true, trim: true },
         province: { type: String, trim: true, default: "" },
         postalCode: { type: String, trim: true, default: "" },

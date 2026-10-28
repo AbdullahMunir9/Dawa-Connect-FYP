@@ -8,6 +8,8 @@ import {
   verifyPharmacyRegistration,
 } from '../services/pharmacyService.js';
 import { removeProfilePhoto, uploadProfilePhoto, uploadRegistrationPhoto } from '../services/pharmacyPhotoService.js';
+import { createClosedMonthSnapshot, listAnalyticsSnapshots, measuredPharmacyAnalytics } from '../services/analyticsService.js';
+import { generateAnalyticsNarrative, getAnalyticsNarrative } from '../services/analyticsNarrativeService.js';
 
 const router = express.Router();
 const pharmacyPhotoBody = express.raw({
@@ -50,6 +52,25 @@ router.get('/products', asyncRoute(async (req) => listProducts(req.pharmacyAuth.
 router.post('/products', asyncRoute(async (req) => createProduct(req.pharmacyAuth.ownerId, req.body)));
 router.patch('/products/:id', asyncRoute(async (req) => updateProduct(req.pharmacyAuth.ownerId, req.params.id, req.body)));
 router.delete('/products/:id', asyncRoute(async (req) => deleteProduct(req.pharmacyAuth.ownerId, req.params.id)));
+
+router.get('/analytics', asyncRoute(async (req) => measuredPharmacyAnalytics(
+  req.pharmacyAuth.ownerId,
+  req.query?.month,
+)));
+router.get('/analytics/narrative', asyncRoute(async (req) => getAnalyticsNarrative(
+  req.pharmacyAuth.ownerId,
+  req.query?.month,
+)));
+router.post('/analytics/narrative', asyncRoute(async (req) => generateAnalyticsNarrative(
+  req.pharmacyAuth.ownerId,
+  req.body?.month,
+  { force: req.body?.force === true },
+)));
+router.get('/analytics/snapshots', asyncRoute(async (req) => listAnalyticsSnapshots(req.pharmacyAuth.ownerId)));
+router.post('/analytics/snapshots/:month', asyncRoute(async (req) => createClosedMonthSnapshot(
+  req.pharmacyAuth.ownerId,
+  req.params.month,
+)));
 
 router.get('/entities/:entity', asyncRoute(async (req) => listEntity(req.pharmacyAuth.ownerId, req.params.entity)));
 router.post('/entities/:entity', asyncRoute(async (req) => createEntity(req.pharmacyAuth.ownerId, req.params.entity, req.body)));
