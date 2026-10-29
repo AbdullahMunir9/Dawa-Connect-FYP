@@ -105,6 +105,9 @@ export default function Analytics() {
   const [narrativeState, setNarrativeState] = useState(null);
   const [narrativeLoading, setNarrativeLoading] = useState(false);
   const [narrativeError, setNarrativeError] = useState('');
+  const [exporting, setExporting] = useState('');
+  const [exportNotice, setExportNotice] = useState('');
+  const [exportError, setExportError] = useState('');
 
   const monthOptions = useMemo(() => Array.from({ length: 12 }, (_, index) => {
     const month = shiftMonth(pakistanMonth(), -index);
@@ -170,6 +173,21 @@ export default function Analytics() {
     }
   };
 
+  const downloadReport = async (format) => {
+    setExporting(format);
+    setExportNotice('');
+    setExportError('');
+    try {
+      const result = await window.electronAPI.analytics.downloadReport({ month: selectedMonth, format });
+      if (!result.ok) throw new Error(result.error || 'The report could not be downloaded.');
+      if (!result.cancelled) setExportNotice(`${format === 'pdf' ? 'PDF report' : 'Excel workbook'} saved to ${result.data.filePath}`);
+    } catch (downloadError) {
+      setExportError(downloadError?.message || 'The report could not be downloaded.');
+    } finally {
+      setExporting('');
+    }
+  };
+
   if (loading) return <div className="card"><EmptyPanel>Loading measured pharmacy analytics…</EmptyPanel></div>;
   if (error) return <div className="card" style={{ borderColor: '#fecaca' }}><EmptyPanel>{error}</EmptyPanel></div>;
   if (!analytics) return <div className="card"><EmptyPanel>No analytics are available.</EmptyPanel></div>;
@@ -190,10 +208,17 @@ export default function Analytics() {
         <select className="form-control" style={{ width: 190 }} value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)}>
           {monthOptions.map((option) => <option key={option.month} value={option.month}>{option.label}</option>)}
         </select>
-        <button className="btn btn-secondary btn-sm" disabled title="PDF export is implemented in the report export phase">PDF export — next phase</button>
-        <button className="btn btn-secondary btn-sm" disabled title="Excel export is implemented in the report export phase">Excel export — next phase</button>
+        <button className="btn btn-secondary btn-sm" disabled={Boolean(exporting)} onClick={() => downloadReport('pdf')}>
+          {exporting === 'pdf' ? 'Preparing PDF…' : 'Download PDF'}
+        </button>
+        <button className="btn btn-secondary btn-sm" disabled={Boolean(exporting)} onClick={() => downloadReport('xlsx')}>
+          {exporting === 'xlsx' ? 'Preparing Excel…' : 'Download Excel'}
+        </button>
       </div>
     </div>
+
+    {exportNotice && <div className="alert alert-success" style={{ marginBottom: 16, overflowWrap: 'anywhere' }}>{exportNotice}</div>}
+    {exportError && <div className="alert alert-danger" style={{ marginBottom: 16 }}>{exportError}</div>}
 
     <div style={{ marginBottom: 18, padding: '12px 16px', borderRadius: 10, background: '#ecfeff', border: '1px solid #a5f3fc', color: '#155e75', fontSize: 12.5 }}>
       <strong>Measured data:</strong> Figures below come from authenticated pharmacy orders and current inventory. No AI-generated number or demonstration value is displayed.

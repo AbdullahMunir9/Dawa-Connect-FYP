@@ -39,6 +39,39 @@ async function apiRequest(path, { method = 'GET', body, authenticated = true, ti
   return data;
 }
 
+async function apiDownload(path, { timeout = 120_000 } = {}) {
+  if (!pharmacySessionToken) throw new Error('Your pharmacy session is missing. Sign in again.');
+  let response;
+  try {
+    response = await fetch(endpoint(path), {
+      headers: {
+        Accept: 'application/pdf, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        Authorization: `Bearer ${pharmacySessionToken}`,
+      },
+      signal: AbortSignal.timeout(timeout),
+    });
+  } catch (error) {
+    if (error?.name === 'TimeoutError') throw new Error('The report took too long to generate. Please try again.');
+    throw new Error('Could not download the report. Check your internet connection.');
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 401) pharmacySessionToken = '';
+    throw Object.assign(new Error(data.message || `Report download failed (${response.status}).`), { status: response.status });
+  }
+  const disposition = response.headers.get('content-disposition') || '';
+  const matchedName = disposition.match(/filename="?([^";]+)"?/i)?.[1] || 'DawaConnect-report';
+  const filename = [...matchedName.replace(/[<>:"/\\|?*]/g, '_')]
+    .filter((character) => character.charCodeAt(0) >= 32)
+    .join('')
+    .slice(0, 160);
+  return {
+    bytes: Buffer.from(await response.arrayBuffer()),
+    filename,
+    contentType: response.headers.get('content-type') || 'application/octet-stream',
+  };
+}
+
 async function apiPhotoRequest(path, buffer, mimeType, { authenticated = true, registrationToken = '' } = {}) {
   if (authenticated && !pharmacySessionToken) throw new Error('Your pharmacy session is missing. Sign in again.');
   let response;
@@ -184,6 +217,11 @@ export function generateAnalyticsNarrative(month, force = false) {
   return apiRequest('/pharmacy/analytics/narrative', {
     method: 'POST', body: { month, force }, timeout: 45_000,
   });
+}
+
+export function downloadAnalyticsReport(month, format) {
+  const query = month ? `?month=${encodeURIComponent(month)}` : '';
+  return apiDownload(`/pharmacy/analytics/export/${encodeURIComponent(format)}${query}`);
 }
 
 export function listCollection(entity) {

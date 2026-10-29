@@ -10,6 +10,7 @@ import {
 import { removeProfilePhoto, uploadProfilePhoto, uploadRegistrationPhoto } from '../services/pharmacyPhotoService.js';
 import { createClosedMonthSnapshot, listAnalyticsSnapshots, measuredPharmacyAnalytics } from '../services/analyticsService.js';
 import { generateAnalyticsNarrative, getAnalyticsNarrative } from '../services/analyticsNarrativeService.js';
+import { createAnalyticsReportFile } from '../services/analyticsReportService.js';
 
 const router = express.Router();
 const pharmacyPhotoBody = express.raw({
@@ -66,6 +67,21 @@ router.post('/analytics/narrative', asyncRoute(async (req) => generateAnalyticsN
   req.body?.month,
   { force: req.body?.force === true },
 )));
+router.get('/analytics/export/:format', asyncRoute(async (req, res) => {
+  const report = await createAnalyticsReportFile(
+    req.pharmacyAuth.ownerId,
+    req.query?.month,
+    req.params.format,
+  );
+  res.set({
+    'Content-Type': report.contentType,
+    'Content-Disposition': `attachment; filename="${report.filename}"`,
+    'Content-Length': String(report.buffer.length),
+    'Cache-Control': 'private, no-store',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  res.status(200).send(report.buffer);
+}));
 router.get('/analytics/snapshots', asyncRoute(async (req) => listAnalyticsSnapshots(req.pharmacyAuth.ownerId)));
 router.post('/analytics/snapshots/:month', asyncRoute(async (req) => createClosedMonthSnapshot(
   req.pharmacyAuth.ownerId,

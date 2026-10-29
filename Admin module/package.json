@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "server": "node server/index.js",
     "test:chat": "node --test server/services/chatPolicy.test.js server/middleware/chatAuth.test.js",
-    "test:analytics": "node --test server/services/analyticsCore.test.js server/services/analyticsNarrativeCore.test.js server/services/analyticsNarrativeProvider.test.js server/services/cityOpportunityCore.test.js server/services/forecastingCore.test.js server/services/inventoryMovement.test.js"
+    "test:analytics": "node --test server/services/analyticsCore.test.js server/services/analyticsNarrativeCore.test.js server/services/analyticsNarrativeProvider.test.js server/services/analyticsNarrativeScenarios.test.js server/services/analyticsReportService.test.js server/services/cityOpportunityCore.test.js server/services/forecastingCore.test.js server/services/inventoryMovement.test.js"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.4",
@@ -18,11 +18,13 @@
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "framer-motion": "^12.38.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.11.0",
     "mongoose": "^9.6.2",
+    "pdfkit": "^0.20.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.18.3",

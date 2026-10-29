@@ -26,6 +26,7 @@ import {
   finalizeAnalyticsSnapshot,
   getAnalyticsNarrative,
   generateAnalyticsNarrative,
+  downloadAnalyticsReport,
   listCollection,
   createCollectionItem,
   updateCollectionItem,
@@ -630,6 +631,29 @@ app.whenReady().then(async () => {
   ipcMain.handle('analytics:narrative-generate', async (_event, payload) => {
     try {
       return { ok: true, data: await generateAnalyticsNarrative(payload?.month, payload?.force === true) }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('analytics:report-download', async (_event, payload) => {
+    try {
+      const format = payload?.format === 'xlsx' ? 'xlsx' : 'pdf'
+      const report = await downloadAnalyticsReport(payload?.month, format)
+      const extension = format === 'xlsx' ? 'xlsx' : 'pdf'
+      const result = await dialog.showSaveDialog(mainWindow, {
+        title: `Save ${format === 'xlsx' ? 'Excel' : 'PDF'} analytics report`,
+        defaultPath: join(app.getPath('documents'), report.filename),
+        filters: format === 'xlsx'
+          ? [{ name: 'Excel workbook', extensions: ['xlsx'] }]
+          : [{ name: 'PDF document', extensions: ['pdf'] }]
+      })
+      if (result.canceled || !result.filePath) return { ok: true, cancelled: true }
+      const filePath = result.filePath.toLowerCase().endsWith(`.${extension}`)
+        ? result.filePath
+        : `${result.filePath}.${extension}`
+      await writeFile(filePath, report.bytes)
+      return { ok: true, data: { filePath, filename: report.filename } }
     } catch (error) {
       return { ok: false, error: error.message }
     }

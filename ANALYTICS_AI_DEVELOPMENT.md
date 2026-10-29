@@ -132,9 +132,9 @@ The ledger starts recording changes after this deployment. It cannot reconstruct
 
 ## Test record for Milestone 1
 
-The following verification was completed through 25 October 2026:
+The following verification was completed through 29 October 2026:
 
-- twenty-three analytics, narrative-safety, forecasting, city-opportunity and inventory-ledger unit tests passed;
+- thirty-three analytics, narrative-safety, scenario-matrix, report-export, forecasting, city-opportunity and inventory-ledger tests passed;
 - month rollover and Pakistan UTC+05:00 boundaries passed;
 - cancelled orders were excluded from revenue and demand;
 - product quantities, daily buckets, hourly buckets and previous-month comparisons passed;
@@ -148,6 +148,7 @@ The following verification was completed through 25 October 2026:
 - malformed provider output, unknown evidence keys, extra report fields and unsupported numeric claims were rejected;
 - provider authentication failures were converted to safe error codes without leaking API keys;
 - the deterministic fallback passed the same report validator as provider output;
+- a dedicated narrative scenario matrix passed for many delivered orders, very little data, a no-order month, low stock, a dormant product with no recent demand, sufficient privacy-safe city-zone data and insufficient city-zone data;
 - twenty-four Marketplace map/location tests passed, including structured area normalization;
 - Pharmacy Electron production renderer/main/preload compilation passed;
 - Marketplace production build passed under Next.js 16.3.7;
@@ -340,8 +341,79 @@ If the provider or key is absent, generation succeeds through the deterministic 
 
 The stored report will record provider, model, prompt version and calculation version. A template narrative will remain available when the AI provider fails.
 
-## Milestone 5 — PDF, Excel and n8n
+### Production validation — 29 October 2026
 
-The backend will generate the canonical PDF and Excel files. The same PDF bytes will be used for manual Pharmacy downloads and monthly email attachments.
+The deployed Render service at `api.dawaconnect.store` was tested through the authenticated Pharmacy API with an approved pharmacy account:
 
-n8n will schedule, batch, retry and send through Resend. It will call narrow authenticated backend endpoints and will never receive MongoDB credentials or customer-level data. Permanent database delivery records plus Resend idempotency keys will prevent duplicate monthly emails.
+- the health route reported both Marketplace and Pharmacy databases connected;
+- authenticated measured analytics loaded for October 2026;
+- September 2026, a month with no orders for the test pharmacy, still produced a complete validated six-section report without invented sales;
+- requesting the unchanged October report reused the saved report instead of creating a duplicate;
+- immediate forced regeneration was rejected with HTTP 429 during the five-minute cooldown;
+- forced regeneration after the cooldown preserved the previous report ID and generation timestamp when the provider failed, and returned a visible warning instead of replacing the valid report;
+- the initial deployed provider request returned `authentication_failed`, so production correctly used `dawaconnect / deterministic-template-v1` rather than storing unvalidated AI output;
+- after the Render key was corrected, forced generation succeeded with `generationMethod: ai`, `provider: groq`, model `openai/gpt-oss-20b`, all six required sections, 39 evidence facts and no unknown evidence references.
+
+This confirms both provider paths: valid Groq output is independently validated and stored, while an invalid credential or provider failure leaves a useful deterministic report available.
+
+## Milestone 5 — PDF and Excel report exports
+
+Status: manual report downloads implemented and tested; n8n delivery remains the next milestone.
+
+The Render backend now generates canonical PDF and Excel reports entirely in memory. It does not write temporary report files to the server. The export identity always comes from the authenticated Pharmacy session, so the application cannot request another pharmacy's report by supplying an owner ID.
+
+Authenticated endpoints:
+
+- `GET /api/pharmacy/analytics/export/pdf?month=YYYY-MM`;
+- `GET /api/pharmacy/analytics/export/xlsx?month=YYYY-MM`.
+
+Both endpoints recalculate the measured analytics for the selected month and load the narrative that matches the current sanitized-input digest. If no current narrative exists, the backend generates one through the validated AI/fallback pipeline before exporting. Responses use private, no-store caching, safe pharmacy/month filenames and attachment headers.
+
+### PDF content
+
+The PDF is the human-readable management report. It includes:
+
+- pharmacy and report-month identity;
+- measured revenue, delivered orders, average order value and units sold;
+- the executive summary and all five recommendation sections;
+- evidence labels and exact deterministic display values for every narrative block;
+- delivered product performance;
+- weekly forecast, target stock, reorder and confidence values;
+- privacy-safe city opportunity status;
+- data-quality warnings and the planning disclaimer;
+- page footers with pharmacy, month and page count.
+
+### Excel workbook content
+
+The `.xlsx` workbook is the audit and deeper-analysis version. It contains seven sheets:
+
+1. `Overview`;
+2. `Daily Sales`;
+3. `Products`;
+4. `Forecast`;
+5. `City Opportunity`;
+6. `Narrative`;
+7. `Evidence`.
+
+Sheets use frozen headers, filters, explicit PKR formatting and wrapped long text. The Narrative sheet keeps the generated explanation separate from verified evidence, while the Evidence sheet exposes the fact catalogue used by the validator. Raw orders and customer-level data are not exported.
+
+### Pharmacy desktop flow
+
+The Analytics page now has active `Download PDF` and `Download Excel` controls. Electron requests the protected report with the existing Pharmacy session, opens the native Windows Save dialog, writes only to the owner-selected path and reports success or failure in the page. No MongoDB URI or AI key is present in the desktop application.
+
+### Export verification
+
+Verification completed on 29 October 2026:
+
+- 33 of 33 analytics, narrative, scenario and export tests passed;
+- a generated PDF had a complete `%PDF-` / `%%EOF` file structure;
+- the generated Excel file reopened successfully through ExcelJS with all seven expected sheets and values;
+- unsupported formats were rejected before database access;
+- the authenticated integration routes rejected an unauthenticated request with HTTP 401;
+- authenticated PDF and Excel requests returned HTTP 200, correct MIME types, safe filenames and valid file signatures;
+- Admin and Pharmacy Electron production builds passed;
+- the new backend files and routes passed targeted ESLint.
+
+## Milestone 6 — n8n and monthly email delivery
+
+n8n will schedule, batch, retry and send the finalized monthly PDF through Resend. It will call narrow authenticated backend endpoints and will never receive MongoDB credentials or customer-level data. Permanent database delivery records plus Resend idempotency keys will prevent duplicate monthly emails. This is the next development phase.
