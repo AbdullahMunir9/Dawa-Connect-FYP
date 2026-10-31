@@ -147,25 +147,31 @@ export async function createClosedMonthSnapshot(ownerId, requestedMonth) {
   const analytics = await measuredPharmacyAnalytics(ownerId, month);
   const now = new Date();
   const snapshotId = randomUUID();
-  const result = await db.collection('analyticsMonthlySnapshots').findOneAndUpdate(
-    { ownerId, month, calculationVersion: analytics.meta.calculationVersion },
-    {
-      $set: {
-        analytics,
-        status: 'measured',
-        finalizedAt: now,
-        updatedAt: now,
+  const identity = { ownerId, month, calculationVersion: analytics.meta.calculationVersion };
+  let result;
+  try {
+    result = await db.collection('analyticsMonthlySnapshots').findOneAndUpdate(
+      identity,
+      {
+        $setOnInsert: {
+          snapshotId,
+          ownerId,
+          month,
+          calculationVersion: analytics.meta.calculationVersion,
+          analytics,
+          status: 'measured',
+          finalizedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        },
       },
-      $setOnInsert: {
-        snapshotId,
-        ownerId,
-        month,
-        calculationVersion: analytics.meta.calculationVersion,
-        createdAt: now,
-      },
-    },
-    { upsert: true, returnDocument: 'after' },
-  );
+      { upsert: true, returnDocument: 'after' },
+    );
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+    result = await db.collection('analyticsMonthlySnapshots').findOne(identity);
+  }
+  if (!result) throw Object.assign(new Error('The monthly analytics snapshot could not be finalized.'), { status: 503 });
   return { ...result, _id: String(result._id) };
 }
 

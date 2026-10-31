@@ -10,6 +10,8 @@ import complaintRoutes from './routes/complaintRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
 import createChatRouter from './routes/chatRoutes.js';
 import pharmacyRoutes from './routes/pharmacyRoutes.js';
+import monthlyReportAutomationRoutes from './routes/monthlyReportAutomationRoutes.js';
+import resendMonthlyReportWebhookRoutes from './routes/resendMonthlyReportWebhookRoutes.js';
 import pharmacyDb from './db/pharmacyConnection.js';
 import { configureChatSocket } from './sockets/chatSocket.js';
 import { startPharmacyNotificationStream } from './services/pharmacyNotificationStream.js';
@@ -42,6 +44,9 @@ app.use(cors({
     return callback(new Error('Origin not allowed by CORS'));
   },
 }));
+// Resend signatures require the exact raw request bytes, so this route must be
+// mounted before the general JSON body parser.
+app.use('/api/webhooks/resend/monthly-reports', resendMonthlyReportWebhookRoutes);
 app.use(express.json({ limit: '200kb' }));
 app.set('trust proxy', false);
 
@@ -78,6 +83,7 @@ app.use('/api/complaints', complaintRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/chat', createChatRouter());
 app.use('/api/pharmacy', pharmacyRoutes);
+app.use('/api/automation/monthly-reports', monthlyReportAutomationRoutes);
 
 app.use((_req, res) => res.status(404).json({ message: 'Not found' }));
 app.use((error, _req, res, _next) => {

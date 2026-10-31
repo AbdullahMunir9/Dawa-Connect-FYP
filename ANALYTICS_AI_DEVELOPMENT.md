@@ -416,4 +416,42 @@ Verification completed on 29 October 2026:
 
 ## Milestone 6 — n8n and monthly email delivery
 
-n8n will schedule, batch, retry and send the finalized monthly PDF through Resend. It will call narrow authenticated backend endpoints and will never receive MongoDB credentials or customer-level data. Permanent database delivery records plus Resend idempotency keys will prevent duplicate monthly emails. This is the next development phase.
+Status: backend automation foundation implemented and tested; Oracle deployment and n8n workflow activation remain pending.
+
+Completed backend work:
+
+- completed-month analytics snapshots are now immutable after first finalization;
+- frozen snapshot analytics can generate or reuse an evidence-validated narrative;
+- one private PDF artifact is stored in MongoDB GridFS for each snapshot/calculation/prompt identity;
+- every stored PDF is checked against its recorded SHA-256 digest and byte length when read;
+- historical manual PDF downloads reuse the same finalized artifact;
+- `monthlyReportDeliveries` permanently records test/production channel, attempts, leases, artifact, Resend ID and delivery state;
+- approved, non-suspended pharmacies require `emailVerifiedAt` and a valid stored email;
+- test mode fails closed unless a valid override recipient is configured;
+- service-token and temporary lease-token checks protect the automation API;
+- initialize, claim, prepare, protected PDF, accepted and failed endpoints are mounted under `/api/automation/monthly-reports`;
+- retry delays are deterministic and stop at the configured attempt limit;
+- a raw-body Resend webhook verifies Svix headers through the official Resend SDK before recording sent, delayed, delivered, bounced, complained or suppressed events;
+- webhook receipts are idempotent and older event replays cannot replace newer delivery state;
+- Oracle deployment assets now include pinned PostgreSQL/n8n/Caddy images, private Docker networking, health checks, HTTPS configuration, persistent volumes and a backup script.
+
+Verification completed on 31 October 2026:
+
+- 44 analytics, narrative, report, automation-rule and webhook-event tests passed;
+- targeted ESLint passed for every new and modified backend file;
+- the Admin production build passed;
+- a live completed-month artifact was written and read from the configured Pharmacy MongoDB;
+- the GridFS file began with `%PDF-`, its SHA-256 integrity check passed, and a repeated request left exactly one metadata record and one file;
+- test-channel initialization created nine eligible records from ten approved candidates, excluded one ineligible account, and created zero duplicates on its second run;
+- the authorized test pharmacy's job was claimed, prepared, downloaded and deliberately finalized as `permanent_failed` without contacting Resend; all eight unselected test seed records were also closed so no pending test email remained;
+- the non-breaking dependency audit update removed fixable high-severity production advisories; moderate ExcelJS transitive advisories remain because npm proposes only a breaking downgrade, and exports accept only backend-generated aggregate data.
+
+Remaining work:
+
+1. Deploy the Render backend changes and add the new server-only variables.
+2. Create the Oracle VM, reserved public IP and `n8n.dawaconnect.store` DNS record.
+3. Deploy and validate the prepared Docker Compose stack.
+4. Create encrypted DawaConnect and Resend credentials in n8n.
+5. Build the monthly schedule/batch/send/failure workflow in test mode.
+6. Register the signed Resend webhook and add its signing secret to Render.
+7. Complete duplicate, retry, restart and real attachment-delivery tests before switching production mode on.

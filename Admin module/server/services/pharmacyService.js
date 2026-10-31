@@ -58,6 +58,21 @@ export async function pharmacyDatabase() {
         { unique: true },
       ),
       pharmacyDb.collection('analyticsNarrativeReports').createIndex({ ownerId: 1, month: -1, generatedAt: -1 }),
+      pharmacyDb.collection('analyticsReportArtifacts').createIndex({ artifactId: 1 }, { unique: true }),
+      pharmacyDb.collection('analyticsReportArtifacts').createIndex(
+        { ownerId: 1, month: 1, snapshotId: 1, calculationVersion: 1, promptVersion: 1 },
+        { unique: true },
+      ),
+      pharmacyDb.collection('monthlyReportDeliveries').createIndex({ deliveryId: 1 }, { unique: true }),
+      pharmacyDb.collection('monthlyReportDeliveries').createIndex(
+        { ownerId: 1, month: 1, channel: 1 }, { unique: true },
+      ),
+      pharmacyDb.collection('monthlyReportDeliveries').createIndex(
+        { month: 1, channel: 1, status: 1, nextAttemptAt: 1, leaseUntil: 1, createdAt: 1 },
+      ),
+      pharmacyDb.collection('monthlyReportDeliveries').createIndex({ resendEmailId: 1 }, { unique: true, sparse: true }),
+      pharmacyDb.collection('monthlyReportWebhookEvents').createIndex({ eventId: 1 }, { unique: true }),
+      pharmacyDb.collection('monthlyReportWebhookEvents').createIndex({ deleteAt: 1 }, { expireAfterSeconds: 0 }),
       pharmacyDb.collection('staff').createIndex({ ownerId: 1, email: 1 }),
       pharmacyDb.collection('reviews').createIndex({ ownerId: 1, date: -1 }),
       pharmacyDb.collection('returns').createIndex({ ownerId: 1, date: -1 }),

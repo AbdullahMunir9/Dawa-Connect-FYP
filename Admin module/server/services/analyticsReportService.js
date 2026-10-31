@@ -104,6 +104,27 @@ export async function buildAnalyticsReportData(ownerId, requestedMonth) {
   };
 }
 
+export async function buildAnalyticsReportDataFromSnapshot(ownerId, snapshot, { exportedAt } = {}) {
+  if (!snapshot?.analytics || String(snapshot.ownerId) !== String(ownerId)) {
+    throw Object.assign(new Error('The monthly analytics snapshot is unavailable.'), { status: 409 });
+  }
+  const { generateAnalyticsNarrativeForAnalytics } = await import('./analyticsNarrativeService.js');
+  const [narrativeResult, pharmacy] = await Promise.all([
+    generateAnalyticsNarrativeForAnalytics(ownerId, snapshot.analytics),
+    pharmacyReportIdentity(ownerId),
+  ]);
+  const narrative = narrativeResult?.report;
+  if (!narrative?.report || !Array.isArray(narrative.evidence)) {
+    throw Object.assign(new Error('The finalized recommendation report is unavailable.'), { status: 409 });
+  }
+  return {
+    analytics: snapshot.analytics,
+    narrative,
+    pharmacy,
+    exportedAt: exportedAt || new Date().toISOString(),
+  };
+}
+
 function ensurePdfSpace(doc, height = 80) {
   if (doc.y + height > doc.page.height - doc.page.margins.bottom) doc.addPage();
 }
@@ -443,7 +464,27 @@ export async function createAnalyticsReportFile(ownerId, requestedMonth, request
   if (!EXPORT_FORMATS.has(format)) {
     throw Object.assign(new Error('Report format must be pdf or xlsx.'), { status: 400 });
   }
-  const data = await buildAnalyticsReportData(ownerId, requestedMonth);
+  const month = normalizeReportMonth(requestedMonth);
+  const currentMonth = normalizeReportMonth();
+  if (format === 'pdf' && month < currentMonth) {
+    const { getOrCreateMonthlyReportArtifact, readMonthlyReportArtifact } = await import('./analyticsReportArtifactService.js');
+    const artifact = await getOrCreateMonthlyReportArtifact(ownerId, month);
+    const stored = await readMonthlyReportArtifact(artifact.artifactId);
+    return {
+      buffer: stored.buffer,
+      filename: stored.filename,
+      contentType: stored.contentType,
+    };
+  }
+
+  let data;
+  if (month < currentMonth) {
+    const { createClosedMonthSnapshot } = await import('./analyticsService.js');
+    const snapshot = await createClosedMonthSnapshot(ownerId, month);
+    data = await buildAnalyticsReportDataFromSnapshot(ownerId, snapshot);
+  } else {
+    data = await buildAnalyticsReportData(ownerId, month);
+  }
   const buffer = format === 'pdf' ? await createAnalyticsPdf(data) : await createAnalyticsExcel(data);
   const base = `DawaConnect-${safeFilenamePart(data.pharmacy.name)}-${data.analytics.meta.month}`;
   return {
