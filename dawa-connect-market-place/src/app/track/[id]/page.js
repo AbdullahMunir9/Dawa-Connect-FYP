@@ -5,14 +5,12 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Check, Clock, Home, MessageCircle, Package, Store, Truck } from "lucide-react";
 import { formatPKR } from "@/lib/currency";
-import { useAuth } from "@/context/AuthContext";
 
 const STEPS = ["Processing", "Confirmed", "Packed", "Dispatched", "Delivered"];
 const STEP_ICONS = [Clock, Check, Package, Truck, Home];
 
 export default function TrackDelivery() {
   const { id } = useParams();
-  const { user } = useAuth();
   const [order, setOrder] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -142,8 +140,8 @@ export default function TrackDelivery() {
             <Link href={`/chat/order/${encodeURIComponent(order.orderId)}`} className="flex items-center justify-center gap-2 rounded-lg bg-blue-800 py-3 text-center font-semibold text-white hover:bg-blue-900">
               <MessageCircle className="h-4 w-4" /> Chat with pharmacy
             </Link>
-            <Link href={user ? "/dashboard/orders" : "/"} className="block text-center py-2.5 border border-blue-200 text-blue-700 rounded-lg font-medium hover:bg-blue-50">
-              {user ? "View all orders" : "Continue shopping"}
+            <Link href="/orders" className="block text-center py-2.5 border border-blue-200 text-blue-700 rounded-lg font-medium hover:bg-blue-50">
+              View all orders
             </Link>
           </aside>
         </div>

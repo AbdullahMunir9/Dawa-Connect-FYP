@@ -16,7 +16,7 @@ const QUICK_ACTIONS = [
   { href: "/pharmacies/map", icon: MapPinned, title: "Find care nearby", text: "Pharmacies, hospitals & clinics on a map", tone: "bg-teal-50 text-teal-700 group-hover:bg-teal-600" },
   { href: "/dashboard/prescriptions", icon: FileText, title: "Upload a prescription", text: "Keep prescriptions handy for your orders", tone: "bg-blue-50 text-blue-700 group-hover:bg-blue-600" },
   { href: "/assistant", icon: Bot, title: "Ask the AI assistant", text: "Dosage, side effects, how the platform works", tone: "bg-violet-50 text-violet-700 group-hover:bg-violet-600" },
-  { href: "/dashboard/orders", icon: Truck, title: "Track an order", text: "Live status from each pharmacy", tone: "bg-amber-50 text-amber-700 group-hover:bg-amber-500" },
+  { href: "/orders", icon: Truck, title: "Track an order", text: "Registered and guest orders from this browser", tone: "bg-amber-50 text-amber-700 group-hover:bg-amber-500" },
 ];
 
 const POPULAR_SEARCHES = ["Panadol", "Augmentin", "Insulin", "ORS", "Cetirizine", "Vitamin D"];

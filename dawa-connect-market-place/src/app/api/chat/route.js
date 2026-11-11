@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { jwtVerify } from "jose";
 import connectToDatabase from "@/lib/mongodb";
-import { AI_SCOPE_REFUSAL, localAiScopeDecision } from "@/lib/aiScope.mjs";
+import {
+  AI_SCOPE_REFUSAL,
+  isAiScopeRefusal,
+  localAiScopeDecision,
+} from "@/lib/aiScope.mjs";
 import AiUsage from "@/models/AiUsage";
 import User from "@/models/User";
 
@@ -48,6 +52,13 @@ Safety rules:
 - For emergencies or severe symptoms, tell the user to contact local emergency services immediately.
 - Do not invent drug facts. State uncertainty when appropriate.
 
+Serious and high-risk medical questions:
+- Questions about cancer, heart disease, stroke, pregnancy, severe illness or prescription treatment are health questions and remain inside the allowed scope.
+- Never use the off-topic refusal merely because a medical request is high-risk, asks for a drug recommendation or cannot be answered as a personalized prescription.
+- When it would be unsafe to select a medicine or treatment for the user, briefly explain why, then still provide useful general education: relevant treatment categories, factors clinicians consider, the appropriate licensed specialist, useful next steps, warning signs when applicable, and an offer to explain an existing diagnosis, report or prescribed medicine.
+- Do not name a specific medicine as the right treatment for an individual cancer or other serious condition without the necessary clinical evaluation. You may accurately explain medicines or treatment categories in general when that helps answer the question.
+- Do not treat a serious diagnosis as an emergency by itself. Recommend emergency care only when the user describes acute warning signs that require it.
+
 Answer quality:
 - Begin with a brief, natural acknowledgement that is specific to the user's question, then answer it directly.
 - Give a complete and useful response rather than only a disclaimer or instruction to consult a professional.
@@ -81,7 +92,15 @@ Examples:
 - "gandum ki fasal ko kitna pani chahiye" => OFF_TOPIC
 - "paracetamol ke side effects kya hain" => ALLOWED
 - "meri khansi ke liye general guidance do" => ALLOWED
+- "I have skin cancer. Can you suggest drugs or medications for my condition?" => ALLOWED
+- "What treatments are generally used for melanoma?" => ALLOWED
+- "Which specialist should I see for a serious kidney condition?" => ALLOWED
 - "how do I track my DawaConnect order" => ALLOWED
+`;
+
+const allowedRequestInstruction = `
+The request has already been classified as an allowed health, medicine, pharmacy or DawaConnect question.
+Do not answer it with the off-topic scope-refusal sentence. If the user requests an unsafe personalized diagnosis, prescription or treatment selection, set that boundary briefly and then provide safe, relevant and useful educational guidance that directly addresses the medical topic.
 `;
 
 function getDayKey(date = new Date()) {
@@ -342,7 +361,13 @@ export async function POST(req) {
     try {
       const completion = await groq.chat.completions.create({
         model,
-        messages: [{ role: "system", content: systemInstruction }, ...messages],
+        messages: [
+          {
+            role: "system",
+            content: `${systemInstruction}\n${allowedRequestInstruction}`,
+          },
+          ...messages,
+        ],
         temperature: 0.6,
         max_completion_tokens: 900,
         reasoning_effort: model.startsWith("openai/") ? "low" : "none",
@@ -351,6 +376,11 @@ export async function POST(req) {
       });
       const answer = completion.choices?.[0]?.message?.content?.trim();
       if (!answer) throw new Error("The model returned an empty response.");
+      if (isAiScopeRefusal(answer)) {
+        throw new Error(
+          "The answer model incorrectly returned the off-topic refusal for an allowed request.",
+        );
+      }
 
       await AiUsage.updateOne({ _id: usage._id }, { $set: { lastModel: model } }).catch(
         (error) => console.error("Could not record the successful AI model:", error)

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { MapPin, Trash2, CheckCircle2 } from "lucide-react";
+import { Trash2, CheckCircle2 } from "lucide-react";
+import SearchDeliveryLocation from "@/components/SearchDeliveryLocation";
 
 const initialForm = {
   label: "Home",
@@ -10,9 +11,12 @@ const initialForm = {
   phone: "",
   line1: "",
   line2: "",
+  area: "",
   city: "",
   province: "",
   postalCode: "",
+  latitude: null,
+  longitude: null,
   isDefault: false,
 };
 
@@ -43,6 +47,10 @@ export default function AddressesPage() {
 
   const handleCreateAddress = async (e) => {
     e.preventDefault();
+    if (typeof form.latitude !== "number" || typeof form.longitude !== "number") {
+      setError("Search and select the delivery point before saving this address.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -62,6 +70,32 @@ export default function AddressesPage() {
       setSaving(false);
     }
   };
+
+  const applyLocation = (location) => {
+    if (!location) {
+      setForm((current) => ({ ...current, area: "", latitude: null, longitude: null }));
+      return;
+    }
+    setForm((current) => ({
+      ...current,
+      line1: current.line1.trim() || location.line1 || location.label || "",
+      area: location.area || current.area,
+      city: location.city || current.city,
+      province: location.province || current.province,
+      postalCode: location.postalCode || current.postalCode,
+      latitude: Number(location.latitude),
+      longitude: Number(location.longitude),
+    }));
+    setError("");
+  };
+
+  const selectedLocation = typeof form.latitude === "number" && typeof form.longitude === "number"
+    ? {
+        ...form,
+        id: "new-profile-address",
+        label: [form.line1, form.area, form.city].filter(Boolean).join(", ") || "Selected delivery point",
+      }
+    : null;
 
   const setDefault = async (addressId) => {
     const response = await fetch("/api/user/addresses", {
@@ -95,6 +129,11 @@ export default function AddressesPage() {
       </div>
 
       <form onSubmit={handleCreateAddress} className="bg-white border border-gray-200 rounded-xl p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="md:col-span-2">
+          <p className="text-sm font-semibold text-gray-900">Select the delivery location</p>
+          <p className="mt-1 text-xs leading-5 text-gray-600">Use your current position or search for a different home, office, area or landmark. You can save an address in another city while sitting anywhere.</p>
+          <SearchDeliveryLocation value={selectedLocation} onChange={applyLocation} />
+        </div>
         <input value={form.label} onChange={(e) => setForm((prev) => ({ ...prev, label: e.target.value }))} placeholder="Label (Home/Office)" className="border border-gray-200 rounded-lg px-3 py-2" required />
         <input value={form.fullName} onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))} placeholder="Full Name" className="border border-gray-200 rounded-lg px-3 py-2" required />
         <input value={form.phone} onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))} placeholder="Phone" className="border border-gray-200 rounded-lg px-3 py-2" required />
@@ -130,6 +169,11 @@ export default function AddressesPage() {
               {address.line2 ? <p className="text-sm text-gray-600">{address.line2}</p> : null}
               <p className="text-sm text-gray-600">{address.city}{address.province ? `, ${address.province}` : ""} {address.postalCode}</p>
               <p className="text-sm font-medium text-gray-900 mt-2">{address.phone}</p>
+              <p className={`mt-2 text-xs font-semibold ${typeof address.latitude === "number" && typeof address.longitude === "number" ? "text-emerald-700" : "text-amber-700"}`}>
+                {typeof address.latitude === "number" && typeof address.longitude === "number"
+                  ? "Delivery point saved"
+                  : "Delivery point missing — select it during checkout"}
+              </p>
               <div className="flex gap-4 mt-4">
                 {!address.isDefault && (
                   <button onClick={() => setDefault(address._id)} className="text-blue-600 text-sm font-medium hover:underline">

@@ -3,12 +3,12 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle2, CreditCard, Banknote, MapPin, Info, ChevronRight, Loader2, LocateFixed } from "lucide-react";
+import { CheckCircle2, CreditCard, Banknote, MapPin, Info, ChevronRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { formatPKR } from "@/lib/currency";
-import { reverseGeocode } from "@/lib/osm";
 import { readDeliveryLocation } from "@/lib/deliveryLocation";
+import SearchDeliveryLocation from "@/components/SearchDeliveryLocation";
 
 const emptyManualAddress = {
   label: "Home",
@@ -26,6 +26,27 @@ const emptyManualAddress = {
 
 const addressInputClass =
   "w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
+function hasCoordinates(address) {
+  return typeof address?.latitude === "number" &&
+    typeof address?.longitude === "number" &&
+    Number.isFinite(address.latitude) && Number.isFinite(address.longitude);
+}
+
+function addressLocationValue(address) {
+  if (!hasCoordinates(address)) return null;
+  return {
+    id: String(address?._id || "checkout-destination"),
+    label: [address.line1, address.area, address.city].filter(Boolean).join(", ") || "Selected delivery destination",
+    line1: address.line1 || "",
+    area: address.area || "",
+    city: address.city || "",
+    province: address.province || "",
+    postalCode: address.postalCode || "",
+    latitude: address.latitude,
+    longitude: address.longitude,
+  };
+}
 
 function CheckoutContent() {
   const router = useRouter();
@@ -45,8 +66,8 @@ function CheckoutContent() {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [placingOrder, setPlacingOrder] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
-  const [locating, setLocating] = useState(false);
-  const [locationError, setLocationError] = useState("");
+  const [savedLocationError, setSavedLocationError] = useState("");
+  const [savingSavedLocation, setSavingSavedLocation] = useState(false);
 
   useEffect(() => {
     const location = readDeliveryLocation();
@@ -110,62 +131,59 @@ function CheckoutContent() {
     (field) => manualAddress[field].trim()
   );
   const checkoutAddress = usingSavedAddress ? selectedAddress : manualAddress;
-  const checkoutAddressHasCoordinates = typeof checkoutAddress?.latitude === "number" &&
-    typeof checkoutAddress?.longitude === "number" &&
-    Number.isFinite(checkoutAddress.latitude) && Number.isFinite(checkoutAddress.longitude);
+  const checkoutAddressHasCoordinates = hasCoordinates(checkoutAddress);
+  const manualLocationValue = addressLocationValue(manualAddress);
 
   const updateManualAddress = (field, value) => {
     setManualAddress((current) => ({
       ...current,
       [field]: value,
-      ...(["line1", "line2", "city", "province", "postalCode"].includes(field)
+      ...(["city", "province"].includes(field)
         ? { area: "", latitude: null, longitude: null }
         : {}),
     }));
   };
 
-  const useCurrentLocation = async () => {
-    setLocationError("");
-    if (!("geolocation" in navigator)) {
-      setLocationError("Your browser does not support location access.");
+  const applyManualLocation = (location) => {
+    if (!location) {
+      setManualAddress((current) => ({ ...current, area: "", latitude: null, longitude: null }));
       return;
     }
+    setManualAddress((current) => ({
+      ...current,
+      line1: current.line1.trim() || location.line1 || location.label || "",
+      area: location.area || current.area,
+      city: location.city || current.city,
+      province: location.province || current.province,
+      postalCode: location.postalCode || current.postalCode,
+      latitude: Number(location.latitude),
+      longitude: Number(location.longitude),
+    }));
+    setCheckoutError("");
+  };
 
-    setLocating(true);
+  const applySavedAddressLocation = async (location) => {
+    if (!location || !selectedAddressId || savingSavedLocation) return;
+    setSavedLocationError("");
+    setSavingSavedLocation(true);
     try {
-      const position = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 12000,
-          maximumAge: 5 * 60 * 1000,
-        });
+      const response = await fetch("/api/user/addresses", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          addressId: selectedAddressId,
+          action: "set-location",
+          location,
+        }),
       });
-      const detectedAddress = await reverseGeocode(
-        position.coords.latitude,
-        position.coords.longitude
-      );
-      setManualAddress((current) => ({
-        ...current,
-        line1: detectedAddress.line1 || current.line1,
-        area: detectedAddress.area || "",
-        city: detectedAddress.city || current.city,
-        province: detectedAddress.province || current.province,
-        postalCode: detectedAddress.postalCode || current.postalCode,
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      }));
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "The delivery point could not be saved.");
+      setAddresses(data.addresses || []);
+      setCheckoutError("");
     } catch (error) {
-      if (error?.code === 1) {
-        setLocationError("Location permission was denied. You can still enter the address manually.");
-      } else if (error?.code === 2) {
-        setLocationError("Your current location could not be determined.");
-      } else if (error?.code === 3) {
-        setLocationError("Location detection timed out. Please try again.");
-      } else {
-        setLocationError(error?.message || "The address could not be detected.");
-      }
+      setSavedLocationError(error.message || "The delivery point could not be saved.");
     } finally {
-      setLocating(false);
+      setSavingSavedLocation(false);
     }
   };
 
@@ -176,7 +194,7 @@ function CheckoutContent() {
       return;
     }
     if (!checkoutAddressHasCoordinates) {
-      setCheckoutError("Choose a precise delivery location so we can confirm that this pharmacy delivers there. Use your search destination or the current-location button.");
+      setCheckoutError("Search and select the delivery address so we can confirm that this pharmacy delivers there. The destination can be in another city from your current location.");
       return;
     }
     setPlacingOrder(true);
@@ -290,54 +308,52 @@ function CheckoutContent() {
             )}
 
             {addressMode === "saved" && user && addresses.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {addresses.map((address) => {
-                  const isSelected = String(address._id) === String(selectedAddressId);
-                  return (
-                    <button
-                      type="button"
-                      key={address._id}
-                      onClick={() => setSelectedAddressId(String(address._id))}
-                      className={`text-left border rounded-lg p-5 relative transition-colors ${isSelected ? "border-2 border-blue-600 bg-blue-50/20" : "border border-gray-200 hover:border-gray-300"}`}
-                    >
-                      {isSelected && <CheckCircle2 className="absolute right-4 top-4 h-5 w-5 text-blue-600" />}
-                      <span className="bg-gray-200 text-gray-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider mb-3 inline-block">
-                        {address.label}
-                      </span>
-                      <h3 className="font-semibold text-gray-900 mb-1">{address.fullName}</h3>
-                      <p className="text-sm text-gray-600 leading-relaxed mb-3">
-                        {address.line1}
-                        {address.line2 ? <><br />{address.line2}</> : null}
-                        <br />
-                        {address.city}{address.province ? `, ${address.province}` : ""} {address.postalCode}
-                      </p>
-                      <p className="text-sm font-medium text-gray-900">{address.phone}</p>
-                    </button>
-                  );
-                })}
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {addresses.map((address) => {
+                    const isSelected = String(address._id) === String(selectedAddressId);
+                    return (
+                      <button
+                        type="button"
+                        key={address._id}
+                        onClick={() => { setSelectedAddressId(String(address._id)); setSavedLocationError(""); }}
+                        className={`text-left border rounded-lg p-5 relative transition-colors ${isSelected ? "border-2 border-blue-600 bg-blue-50/20" : "border border-gray-200 hover:border-gray-300"}`}
+                      >
+                        {isSelected && <CheckCircle2 className="absolute right-4 top-4 h-5 w-5 text-blue-600" />}
+                        <span className="bg-gray-200 text-gray-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider mb-3 inline-block">
+                          {address.label}
+                        </span>
+                        <h3 className="font-semibold text-gray-900 mb-1">{address.fullName}</h3>
+                        <p className="text-sm text-gray-600 leading-relaxed mb-3">
+                          {address.line1}
+                          {address.line2 ? <><br />{address.line2}</> : null}
+                          <br />
+                          {address.city}{address.province ? `, ${address.province}` : ""} {address.postalCode}
+                        </p>
+                        <p className="text-sm font-medium text-gray-900">{address.phone}</p>
+                        <p className={`mt-2 text-xs font-semibold ${hasCoordinates(address) ? "text-emerald-700" : "text-amber-700"}`}>
+                          {hasCoordinates(address) ? "Delivery point saved" : "Delivery point needed"}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedAddress && !hasCoordinates(selectedAddress) && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+                    <p className="text-sm font-semibold text-gray-900">Choose this address’s delivery point</p>
+                    <p className="mt-1 text-xs leading-5 text-gray-600">Search for this home, area or a nearby landmark. You can select it remotely; your device does not need to be at the delivery address.</p>
+                    <SearchDeliveryLocation value={null} onChange={applySavedAddressLocation} />
+                    {savingSavedLocation && <p className="mt-3 text-xs font-semibold text-blue-700">Saving the delivery point…</p>}
+                    {savedLocationError && <p className="mt-3 text-xs font-semibold text-red-600">{savedLocationError}</p>}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50/50 p-4 md:col-span-2">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">Fill the address from your location</p>
-                      <p className="mt-1 text-xs text-gray-600">Your browser will ask for permission. Please confirm the detected street and house number.</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={useCurrentLocation}
-                      disabled={locating}
-                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-wait disabled:opacity-60"
-                    >
-                      {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : <LocateFixed className="h-4 w-4" />}
-                      {locating ? "Finding address..." : "Use my current location"}
-                    </button>
-                  </div>
-                  {locationError && <p className="mt-3 text-xs font-medium text-red-600">{locationError}</p>}
-                  <p className="mt-2 text-[11px] text-gray-500">
-                    Address lookup by <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">OpenStreetMap contributors</a>
-                  </p>
+                <div className="md:col-span-2">
+                  <p className="text-sm font-semibold text-gray-900">Choose where this order should be delivered</p>
+                  <p className="mt-1 text-xs leading-5 text-gray-600">Use your current position or search for a different home, office, area or landmark anywhere in Pakistan. Selecting a result lets us check the pharmacy’s actual delivery radius.</p>
+                  <SearchDeliveryLocation value={manualLocationValue} onChange={applyManualLocation} />
                 </div>
                 <label className="text-sm font-medium text-gray-700">
                   Address label
@@ -455,7 +471,7 @@ function CheckoutContent() {
               <p className="text-sm text-gray-600">{checkoutAddress.city}{checkoutAddress.province ? `, ${checkoutAddress.province}` : ""} {checkoutAddress.postalCode}</p>
               <p className="text-sm text-gray-900 mt-1">{checkoutAddress.phone}</p>
               <p className={`mt-3 text-xs font-medium ${checkoutAddressHasCoordinates ? "text-emerald-700" : "text-amber-700"}`}>
-                {checkoutAddressHasCoordinates ? "Precise delivery point confirmed" : "This saved address needs a precise delivery point before ordering"}
+                {checkoutAddressHasCoordinates ? "Delivery point selected for the pharmacy distance check" : "Search and select the delivery area above before ordering"}
               </p>
             </div>
           )}

@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { AI_SCOPE_REFUSAL, localAiScopeDecision } from "./aiScope.mjs";
+import {
+  AI_SCOPE_REFUSAL,
+  isAiScopeRefusal,
+  localAiScopeDecision,
+} from "./aiScope.mjs";
 
 const question = (content) => [{ role: "user", content }];
 
@@ -8,6 +12,25 @@ test("allows medicine and health questions", () => {
   assert.equal(localAiScopeDecision(question("What are the side effects of metformin?")), "allowed");
   assert.equal(localAiScopeDecision(question("Mujhe bukhar aur sar dard hai")), "allowed");
   assert.equal(localAiScopeDecision(question("یہ دوا کھانے کے بعد لینی ہے؟")), "allowed");
+});
+
+test("keeps serious and high-risk medical conditions in scope", () => {
+  assert.equal(
+    localAiScopeDecision(
+      question(
+        "I have skin cancer. Can you give drugs or suggest some medications for my condition?",
+      ),
+    ),
+    "allowed",
+  );
+  assert.equal(
+    localAiScopeDecision(question("What treatments are generally used for melanoma?")),
+    "allowed",
+  );
+  assert.equal(
+    localAiScopeDecision(question("What type of doctor treats kidney disease?")),
+    "allowed",
+  );
 });
 
 test("allows DawaConnect platform help and greetings", () => {
@@ -38,5 +61,12 @@ test("sends mixed or contextual requests to semantic classification", () => {
 
 test("exports one stable refusal message", () => {
   assert.match(AI_SCOPE_REFUSAL, /only help with medicines/i);
+  assert.equal(isAiScopeRefusal(AI_SCOPE_REFUSAL), true);
+  assert.equal(isAiScopeRefusal(`  ${AI_SCOPE_REFUSAL}\n`), true);
+  assert.equal(isAiScopeRefusal(`Sorry. ${AI_SCOPE_REFUSAL}`), true);
+  assert.equal(
+    isAiScopeRefusal("Cancer treatment depends on the cancer type and stage."),
+    false,
+  );
 });
 

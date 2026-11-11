@@ -143,7 +143,7 @@ export async function createCommerceOrder({
       if (typeof deliveryAddress.latitude !== "number" || typeof deliveryAddress.longitude !== "number" ||
         !Number.isFinite(deliveryAddress.latitude) || !Number.isFinite(deliveryAddress.longitude)) {
         throw new CommerceError(
-          "Choose a precise delivery location so the pharmacy delivery radius can be verified",
+          "Search and select the delivery address so the pharmacy delivery radius can be verified",
           400,
           "DELIVERY_LOCATION_REQUIRED",
         );

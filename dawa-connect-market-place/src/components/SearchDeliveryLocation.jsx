@@ -133,6 +133,10 @@ export default function SearchDeliveryLocation({ value, onChange }) {
             </div>
           )}
 
+          <p className="mt-3 text-[11px] text-gray-500">
+            Address search powered by <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer" className="underline">Geoapify</a> with map data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline">OpenStreetMap contributors</a>.
+          </p>
+
           {value && (
             <button type="button" onClick={() => { onChange(null); setOpen(true); }} className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-red-600">
               <X className="h-3.5 w-3.5" /> Clear selected destination

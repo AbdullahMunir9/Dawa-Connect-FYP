@@ -9,6 +9,8 @@ const HEALTH_TERMS = [
   "allergy", "allergies", "infection", "antibiotic", "vaccine", "vaccination", "fever", "pain",
   "headache", "migraine", "cough", "flu", "cold", "nausea", "vomiting", "diarrhea", "wound",
   "blood pressure", "diabetes", "pregnancy", "anxiety", "depression", "mental health", "emergency",
+  "cancer", "skin cancer", "melanoma", "tumor", "tumour", "chemotherapy", "immunotherapy",
+  "heart disease", "heart attack", "stroke", "asthma", "kidney disease", "liver disease",
   "chest pain", "breathing", "nutrition", "diet", "exercise", "sleep", "dawai", "dawa", "daway",
   "ilaaj", "ilaj", "sehat", "bimari", "bemari", "bukhar", "khansi", "dard", "ulti", "dast",
   "sar dard", "دوا", "دوائی", "ادویات", "صحت", "بیماری", "علاج", "بخار", "کھانسی", "درد",
@@ -51,6 +53,17 @@ function containsAny(text, terms) {
 
 function isSimpleGreeting(text) {
   return /^(hi|hello|hey|salam|assalam o alaikum|assalamualaikum|aoa|good morning|good afternoon|good evening)( there)?$/.test(text);
+}
+
+/**
+ * Identifies the one exact response reserved for genuinely off-topic requests.
+ * The API uses this after an allowed request is answered so a model cannot
+ * accidentally turn a medical-safety limitation into an off-topic refusal.
+ */
+export function isAiScopeRefusal(value) {
+  const answer = normalize(value);
+  const refusal = normalize(AI_SCOPE_REFUSAL);
+  return answer === refusal || answer.includes(refusal);
 }
 
 /**

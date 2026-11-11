@@ -17,6 +17,17 @@ async function getUserIdFromReq(req) {
   }
 }
 
+function normalizeLocation(value) {
+  const hasLatitude = value?.latitude !== undefined && value?.latitude !== null && value?.latitude !== "";
+  const hasLongitude = value?.longitude !== undefined && value?.longitude !== null && value?.longitude !== "";
+  if (!hasLatitude || !hasLongitude) return null;
+  const latitude = Number(value.latitude);
+  const longitude = Number(value.longitude);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+    !Number.isFinite(longitude) || longitude < -180 || longitude > 180) return null;
+  return { latitude, longitude };
+}
+
 export async function GET(req) {
   try {
     const userId = await getUserIdFromReq(req);
@@ -41,14 +52,10 @@ export async function POST(req) {
     for (const field of required) {
       if (!body[field]) return NextResponse.json({ message: `${field} is required` }, { status: 400 });
     }
-    const hasLatitude = body.latitude !== undefined && body.latitude !== null && body.latitude !== "";
-    const hasLongitude = body.longitude !== undefined && body.longitude !== null && body.longitude !== "";
-    const latitude = hasLatitude ? Number(body.latitude) : null;
-    const longitude = hasLongitude ? Number(body.longitude) : null;
-    if (hasLatitude !== hasLongitude || (hasLatitude && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
-      !Number.isFinite(longitude) || longitude < -180 || longitude > 180))) {
-      return NextResponse.json({ message: "Choose a valid map location for this address" }, { status: 400 });
-    }
+    const location = normalizeLocation(body);
+    if (!location) return NextResponse.json({
+      message: "Search and select a delivery point for this address",
+    }, { status: 400 });
 
     await connectToDatabase();
     const user = await User.findById(userId);
@@ -72,8 +79,8 @@ export async function POST(req) {
       city: body.city,
       province: body.province || "",
       postalCode: body.postalCode || "",
-      latitude,
-      longitude,
+      latitude: location.latitude,
+      longitude: location.longitude,
       isDefault: shouldBeDefault,
     });
 
@@ -90,8 +97,8 @@ export async function PATCH(req) {
     const userId = await getUserIdFromReq(req);
     if (!userId) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const { addressId, action } = await req.json();
-    if (!addressId || action !== "set-default") {
+    const { addressId, action, location: suppliedLocation } = await req.json();
+    if (!addressId || !["set-default", "set-location"].includes(action)) {
       return NextResponse.json({ message: "Invalid request" }, { status: 400 });
     }
 
@@ -100,9 +107,23 @@ export async function PATCH(req) {
     if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
     if (!Array.isArray(user.addresses)) user.addresses = [];
 
-    user.addresses.forEach((address) => {
-      address.isDefault = String(address._id) === String(addressId);
-    });
+    const selectedAddress = user.addresses.find((address) => String(address._id) === String(addressId));
+    if (!selectedAddress) return NextResponse.json({ message: "Address not found" }, { status: 404 });
+
+    if (action === "set-default") {
+      user.addresses.forEach((address) => {
+        address.isDefault = String(address._id) === String(addressId);
+      });
+    } else {
+      const location = normalizeLocation(suppliedLocation);
+      if (!location) return NextResponse.json({ message: "Choose a valid delivery point" }, { status: 400 });
+      selectedAddress.latitude = location.latitude;
+      selectedAddress.longitude = location.longitude;
+      selectedAddress.area = String(suppliedLocation?.area || selectedAddress.area || "").trim().slice(0, 100);
+      selectedAddress.city = String(suppliedLocation?.city || selectedAddress.city || "").trim().slice(0, 100);
+      selectedAddress.province = String(suppliedLocation?.province || selectedAddress.province || "").trim().slice(0, 100);
+      selectedAddress.postalCode = String(suppliedLocation?.postalCode || selectedAddress.postalCode || "").trim().slice(0, 30);
+    }
     await user.save();
 
     return NextResponse.json({ addresses: user.addresses }, { status: 200 });

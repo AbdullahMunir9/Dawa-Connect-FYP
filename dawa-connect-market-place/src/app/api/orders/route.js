@@ -30,11 +30,12 @@ export async function GET(req) {
     await connectToDatabase();
     const { searchParams } = new URL(req.url);
     const orderId = searchParams.get("orderId");
+    const guestToken = req.cookies.get(GUEST_ORDER_COOKIE)?.value;
+    const permittedOwners = [];
+    if (userId) permittedOwners.push({ userId });
+    if (guestToken) permittedOwners.push({ guestSessionHash: hashGuestToken(guestToken) });
+
     if (orderId) {
-      const guestToken = req.cookies.get(GUEST_ORDER_COOKIE)?.value;
-      const permittedOwners = [];
-      if (userId) permittedOwners.push({ userId });
-      if (guestToken) permittedOwners.push({ guestSessionHash: hashGuestToken(guestToken) });
       if (!permittedOwners.length) {
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
       }
@@ -47,8 +48,13 @@ export async function GET(req) {
       return NextResponse.json({ order }, { status: 200 });
     }
 
-    if (!userId) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    const orders = await Order.find({ userId }).sort({ createdAt: -1 });
+    if (!permittedOwners.length) {
+      return NextResponse.json({ orders: [] }, { status: 200 });
+    }
+    const ownerFilter = permittedOwners.length === 1
+      ? permittedOwners[0]
+      : { $or: permittedOwners };
+    const orders = await Order.find(ownerFilter).sort({ createdAt: -1 }).limit(50);
     return NextResponse.json({ orders }, { status: 200 });
   } catch (error) {
     console.error("Fetch orders error:", error);
