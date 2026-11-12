@@ -14,7 +14,6 @@ function buildProfileSavePayload(form) {
     deliveryCharge: form.deliveryCharge ?? 0,
     deliveryRadius: form.deliveryRadius ?? 10,
     deliveryType: form.deliveryType ?? 'Self Delivery',
-    taxRate: form.taxRate ?? 0,
     bankName: form.bankName ?? '',
     accountNo: form.accountNo ?? ''
   };
@@ -34,7 +33,6 @@ function profileToFormState(p) {
     deliveryCharge: p.deliveryCharge ?? 0,
     deliveryRadius: p.deliveryRadius ?? 10,
     deliveryType: p.deliveryType ?? 'Self Delivery',
-    taxRate: p.taxRate ?? 5,
     bankName: p.bankName ?? '',
     accountNo: p.accountNo ?? '',
     photos: p.photos ?? {},
@@ -188,10 +186,7 @@ export function ProfilePage() {
               </div>
             </>}
             {tab === 'payment' && (<>
-              <div className="form-row">
-                <div className="form-group"><label className="form-label">Tax Rate (%)</label><input className="form-control" type="number" value={form.taxRate} onChange={e => set('taxRate', Number(e.target.value))} /></div>
-                <div className="form-group"><label className="form-label">Bank Name</label><input className="form-control" value={form.bankName} onChange={e => set('bankName', e.target.value)} /></div>
-              </div>
+              <div className="form-group"><label className="form-label">Bank Name</label><input className="form-control" value={form.bankName} onChange={e => set('bankName', e.target.value)} /></div>
               <div className="form-group"><label className="form-label">Account / IBAN</label><input className="form-control" value={form.accountNo} onChange={e => set('accountNo', e.target.value)} /></div>
             </>)}
             {tab !== 'photos' && <button type="submit" className="btn btn-primary" style={{ marginTop: 8 }} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>}

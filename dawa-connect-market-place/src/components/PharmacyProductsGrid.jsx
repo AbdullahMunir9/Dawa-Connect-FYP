@@ -62,7 +62,6 @@ export default function PharmacyProductsGrid({ pharmacy }) {
                       timing: pharmacy.timing,
                       deliveryCharge: product.deliveryCharge,
                       deliveryType: product.deliveryType,
-                      taxRate: product.taxRate,
                     })
                   }
                   className={`${

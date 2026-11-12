@@ -84,7 +84,6 @@ function buildPharmacyView(user, profile, productCount = 0, ratingSummary) {
     deliveryCharge: Number(profile?.deliveryCharge ?? user.deliveryCharge ?? 0),
     deliveryRadius: Number(profile?.deliveryRadius ?? user.serviceRadiusKm ?? 0),
     deliveryType: profile?.deliveryType || "Self Delivery",
-    taxRate: Number(profile?.taxRate ?? 0),
     rating,
     reviewCount,
     productCount: Number(productCount || 0),
@@ -123,7 +122,6 @@ function buildProductView(product, pharmacy) {
     deliveryAvailable: pharmacy.isOpen,
     deliveryCharge: pharmacy.deliveryCharge,
     deliveryType: pharmacy.deliveryType,
-    taxRate: pharmacy.taxRate,
   };
 }
 

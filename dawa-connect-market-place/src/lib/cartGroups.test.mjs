@@ -13,10 +13,10 @@ test("groups independent carts by pharmacy and prices each cart separately", () 
   assert.equal(carts.length, 2);
   assert.equal(carts[0].itemCount, 3);
   assert.equal(carts[0].subtotal, 400);
-  assert.equal(carts[0].tax, 20);
+  assert.equal(Object.hasOwn(carts[0], "tax"), false);
   assert.equal(carts[0].deliveryFee, 40);
-  assert.equal(carts[0].processingFee, 100);
-  assert.equal(carts[0].total, 560);
+  assert.equal(carts[0].processingFee, 9);
+  assert.equal(carts[0].total, 449);
 });
 
 test("selects one pharmacy cart without including another pharmacy", () => {

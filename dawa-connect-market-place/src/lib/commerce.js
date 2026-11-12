@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from "crypto";
 import mongoose from "mongoose";
 import { getCommerceDatabases } from "@/lib/pharmacyCatalog";
 import { assessPharmacyDelivery } from "@/lib/deliveryRanking.mjs";
+import { PLATFORM_PROCESSING_FEE } from "@/lib/pricing.mjs";
 
 export class CommerceError extends Error {
   constructor(message, status = 400, code = "COMMERCE_ERROR") {
@@ -270,7 +271,6 @@ export async function createCommerceOrder({
       const fulfillments = [];
       const pharmacyOrders = [];
       let subtotal = 0;
-      let tax = 0;
       let deliveryFee = 0;
       let sequence = 1;
 
@@ -278,9 +278,8 @@ export async function createCommerceOrder({
         const user = pharmacyUsersById.get(pharmacyId);
         const profile = profilesByOwner.get(pharmacyId);
         const pharmacyName = profile?.name || user?.pharmacyName || "Registered Pharmacy";
-        const groupTax = money(group.subtotal * (Number(profile?.taxRate || 0) / 100));
         const groupDeliveryFee = money(profile?.deliveryCharge ?? user?.deliveryCharge ?? 0);
-        const fulfillmentTotal = money(group.subtotal + groupTax + groupDeliveryFee);
+        const fulfillmentTotal = money(group.subtotal + groupDeliveryFee);
         const pharmacyOrderId = `${orderId}-${String(sequence).padStart(2, "0")}`;
 
         fulfillments.push({
@@ -290,7 +289,7 @@ export async function createCommerceOrder({
           status: "Pending",
           itemCount: group.items.reduce((sum, item) => sum + item.quantity, 0),
           subtotal: group.subtotal,
-          tax: groupTax,
+          tax: 0,
           deliveryFee: groupDeliveryFee,
           total: fulfillmentTotal,
           updatedAt: now,
@@ -306,7 +305,7 @@ export async function createCommerceOrder({
           phone: deliveryAddress.phone || customer?.phone || "",
           items: group.items,
           subtotal: group.subtotal,
-          tax: groupTax,
+          tax: 0,
           deliveryFee: groupDeliveryFee,
           total: fulfillmentTotal,
           status: "Pending",
@@ -322,13 +321,12 @@ export async function createCommerceOrder({
           updatedAt: now,
         });
         subtotal = money(subtotal + group.subtotal);
-        tax = money(tax + groupTax);
         deliveryFee = money(deliveryFee + groupDeliveryFee);
         sequence += 1;
       }
 
-      const processingFee = 100;
-      const total = money(subtotal + tax + deliveryFee + processingFee);
+      const processingFee = PLATFORM_PROCESSING_FEE;
+      const total = money(subtotal + deliveryFee + processingFee);
       createdOrder = {
         _id: marketplaceOrderObjectId,
         userId: customer?._id || null,
@@ -351,7 +349,7 @@ export async function createCommerceOrder({
         }))),
         fulfillments,
         subtotal,
-        tax,
+        tax: 0,
         deliveryFee,
         processingFee,
         total,

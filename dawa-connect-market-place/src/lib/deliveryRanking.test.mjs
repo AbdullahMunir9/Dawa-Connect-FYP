@@ -20,10 +20,9 @@ test('classifies deliverable, closed, out-of-range and unlocated pharmacies', ()
 test('checkout estimate matches cart pricing for one product', () => {
   assert.deepEqual(checkoutEstimate({ price: 500, taxRate: 5, deliveryCharge: 80 }), {
     subtotal: 500,
-    tax: 25,
     deliveryFee: 80,
-    processingFee: 100,
-    total: 705,
+    processingFee: 9,
+    total: 589,
   });
 });
 
@@ -35,5 +34,5 @@ test('optimal offer excludes unavailable pharmacies and sorts by payable total t
   ];
   const selected = selectOptimalOffer(offers);
   assert.equal(selected.id, 'near');
-  assert.equal(selected.checkoutEstimate.total, 650);
+  assert.equal(selected.checkoutEstimate.total, 559);
 });

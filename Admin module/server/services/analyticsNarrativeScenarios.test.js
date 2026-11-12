@@ -43,9 +43,9 @@ function order({
     status,
     createdAt: new Date(createdAt),
     subtotal,
-    tax: subtotal * 0.05,
+    tax: 0,
     deliveryFee: 50,
-    total: subtotal * 1.05 + 50,
+    total: subtotal + 50,
     paymentMethod: 'cash',
     items: [{ productId, name, quantity, price, lineTotal: subtotal }],
   };

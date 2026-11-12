@@ -122,7 +122,7 @@ export default function TrackDelivery() {
               <h2 className="font-semibold text-gray-900 mb-4">Order total</h2>
               <div className="space-y-2 text-sm text-gray-600">
                 <p className="flex justify-between"><span>Subtotal</span><span>{formatPKR(order.subtotal)}</span></p>
-                <p className="flex justify-between"><span>Tax</span><span>{formatPKR(order.tax)}</span></p>
+                {Number(order.tax || 0) > 0 && <p className="flex justify-between"><span>Historical adjustment</span><span>{formatPKR(order.tax)}</span></p>}
                 <p className="flex justify-between"><span>Delivery</span><span>{formatPKR(order.deliveryFee)}</span></p>
                 <p className="flex justify-between"><span>Processing</span><span>{formatPKR(order.processingFee)}</span></p>
               </div>

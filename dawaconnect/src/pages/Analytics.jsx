@@ -501,7 +501,7 @@ export default function Analytics() {
           return <div key={payment.method} style={{ marginBottom: 16 }}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}><span style={{ fontWeight: 600 }}>{payment.method}</span><span style={{ color: '#0f766e', fontWeight: 700 }}>{currency(payment.amount)} · {percentage}%</span></div><div className="progress-bar"><div className="progress-fill" style={{ width: `${percentage}%`, background: '#0d9488' }} /></div></div>;
         }) : <EmptyPanel>No delivered payments were recorded in this month.</EmptyPanel>}
       </div>
-      <div style={{ padding: '0 22px 18px', fontSize: 11.5, color: '#64748b' }}>Gross collected: {currency(summary.grossCollected)} · Product revenue: {currency(summary.productRevenue)} · Delivery fees: {currency(summary.deliveryFees)} · Tax: {currency(summary.tax)}</div>
+      <div style={{ padding: '0 22px 18px', fontSize: 11.5, color: '#64748b' }}>Gross collected: {currency(summary.grossCollected)} · Product revenue: {currency(summary.productRevenue)} · Delivery fees: {currency(summary.deliveryFees)}</div>
     </div>
 
     {dataQuality?.warnings?.length > 0 && <div style={{ marginTop: 18, padding: '14px 18px', borderRadius: 10, background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', fontSize: 12 }}>

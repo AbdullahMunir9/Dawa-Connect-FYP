@@ -6,7 +6,7 @@ const profileSchema = new mongoose.Schema({
   ownerId: { type: String },
   name: String, address: String, phone: String, email: String, license: String, hours: String,
   status: String, approvalStatus: String, logo: String,
-  deliveryCharge: Number, deliveryRadius: Number, deliveryType: String, taxRate: Number,
+  deliveryCharge: Number, deliveryRadius: Number, deliveryType: String,
   bankName: String, accountNo: String, latitude: Number, longitude: Number,
 }, { timestamps: true, strict: false, collection: 'profiles' });
 

@@ -389,7 +389,6 @@ export async function createAnalyticsExcel(data) {
     ['Cancellation rate', analytics.summary.cancellationRate / 100, 'Measured'],
     ['Product revenue', analytics.summary.productRevenue, 'PKR; measured'],
     ['Delivery fees', analytics.summary.deliveryFees, 'PKR; measured'],
-    ['Tax', analytics.summary.tax, 'PKR; measured'],
     ['Gross collected', analytics.summary.grossCollected, 'PKR; measured'],
     ['Average order value', analytics.summary.averageOrderValue, 'PKR; measured'],
     ['Units sold', analytics.summary.unitsSold, 'Measured'],

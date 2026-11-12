@@ -27,8 +27,8 @@ function reportData() {
       meta: { month: '2026-10', monthLabel: 'Oct 2026', calculationVersion: 'v1' },
       summary: {
         ordersPlaced: 14, deliveredOrders: 12, cancelledOrders: 2, cancellationRate: 14.3,
-        productRevenue: 12400, deliveryFees: 600, tax: 620, grossCollected: 13620,
-        averageOrderValue: 1135, unitsSold: 28, inventoryProducts: 2, activeProducts: 2,
+        productRevenue: 12400, deliveryFees: 600, grossCollected: 13000,
+        averageOrderValue: 1083.33, unitsSold: 28, inventoryProducts: 2, activeProducts: 2,
         lowStockProducts: 1, outOfStockProducts: 0,
       },
       comparisons: { productRevenuePercent: 15 },

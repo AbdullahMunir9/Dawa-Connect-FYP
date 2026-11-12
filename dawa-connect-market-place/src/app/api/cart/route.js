@@ -34,7 +34,6 @@ function sanitizeCartItems(items) {
       pharmacyName: String(item.pharmacyName || ""),
       timing: String(item.timing || ""),
       deliveryCharge: Math.max(0, Number(item.deliveryCharge) || 0),
-      taxRate: Math.max(0, Number(item.taxRate) || 0),
       deliveryType: String(item.deliveryType || ""),
       price: Number(item.price) || 0,
       quantity: Math.max(1, Number(item.quantity) || 1),

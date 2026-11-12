@@ -11,12 +11,12 @@ const inventory = [
 const orders = [
   {
     id: 'delivered-1', status: 'Delivered', createdAt: new Date('2026-10-05T05:15:00.000Z'),
-    subtotal: 500, tax: 25, deliveryFee: 50, total: 575, payMethod: 'Cash on Delivery',
+    subtotal: 500, tax: 0, deliveryFee: 50, total: 550, payMethod: 'Cash on Delivery',
     items: [{ productId: 'p1', name: 'Panadol 500mg', quantity: 2, price: 250, lineTotal: 500 }],
   },
   {
     id: 'delivered-2', status: 'Delivered', date: '2026-10-10',
-    subtotal: 300, tax: 15, deliveryFee: 50, total: 365, paymentMethod: 'cash',
+    subtotal: 300, tax: 0, deliveryFee: 50, total: 350, paymentMethod: 'cash',
     items: [{ productId: 'p2', name: 'Vitamin C', qty: 3, price: 100, lineTotal: 300 }],
   },
   {
@@ -26,7 +26,7 @@ const orders = [
   },
   {
     id: 'previous', status: 'Delivered', createdAt: new Date('2026-09-08T10:00:00.000Z'),
-    subtotal: 400, tax: 20, deliveryFee: 50, total: 470,
+    subtotal: 400, tax: 0, deliveryFee: 50, total: 450,
     items: [{ productId: 'p1', name: 'Panadol 500mg', quantity: 1, lineTotal: 400 }],
   },
 ];
@@ -48,9 +48,9 @@ test('measured analytics excludes cancelled orders from revenue and demand', () 
   assert.equal(report.summary.deliveredOrders, 2);
   assert.equal(report.summary.cancelledOrders, 1);
   assert.equal(report.summary.productRevenue, 800);
-  assert.equal(report.summary.grossCollected, 940);
+  assert.equal(report.summary.grossCollected, 900);
   assert.equal(report.summary.unitsSold, 5);
-  assert.equal(report.summary.averageOrderValue, 470);
+  assert.equal(report.summary.averageOrderValue, 450);
   assert.equal(report.products[0].name, 'Vitamin C');
   assert.equal(report.products[0].unitsSold, 3);
   assert.equal(report.products.find((product) => product.productId === 'p1').unitsSold, 2);

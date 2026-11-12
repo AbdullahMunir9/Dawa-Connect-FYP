@@ -81,7 +81,7 @@ function OrderDrawer({ orderId, onClose }) {
                         <li key={`${item.productId}-${i}`} className="flex items-center justify-between gap-3 px-4 py-2 text-sm"><span className="min-w-0"><span className="block truncate text-ink">{item.name}</span><span className="text-xs text-muted">{item.category}{item.unit ? ` · ${item.unit}` : ""} · {formatMoney(item.price)} × {item.quantity}</span></span><span className="tabular font-medium">{formatMoney(item.lineTotal ?? item.price * item.quantity)}</span></li>
                       ))}
                     </ul>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-line px-4 py-2 text-xs text-muted"><span>Subtotal {formatMoney(f.subtotal)}</span><span>Tax {formatMoney(f.tax)}</span><span>Delivery {formatMoney(f.deliveryFee)}</span>{f.updatedAt && <span className="ml-auto">Updated {formatRelative(f.updatedAt)}</span>}</div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-line px-4 py-2 text-xs text-muted"><span>Subtotal {formatMoney(f.subtotal)}</span>{Number(f.tax || 0) > 0 && <span>Historical adjustment {formatMoney(f.tax)}</span>}<span>Delivery {formatMoney(f.deliveryFee)}</span>{f.updatedAt && <span className="ml-auto">Updated {formatRelative(f.updatedAt)}</span>}</div>
                   </div>
                 );
               })}
@@ -92,8 +92,8 @@ function OrderDrawer({ orderId, onClose }) {
           <section className="rounded-xl border border-line p-4">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink"><Receipt className="h-4 w-4 text-muted" /> Payment summary</h3>
             <KeyValue columns={3} items={[
-              { label: "Subtotal", value: formatMoney(order.subtotal) }, { label: "Tax", value: formatMoney(order.tax) }, { label: "Delivery", value: formatMoney(order.deliveryFee) },
-              { label: "Processing fee", value: formatMoney(order.processingFee) }, { label: "Total", value: <span className="text-base font-semibold">{formatMoney(order.total)}</span> }, { label: "Payment status", value: order.paymentStatus || "—" },
+              { label: "Subtotal", value: formatMoney(order.subtotal) }, ...(Number(order.tax || 0) > 0 ? [{ label: "Historical adjustment", value: formatMoney(order.tax) }] : []), { label: "Delivery", value: formatMoney(order.deliveryFee) },
+              { label: "Processing", value: formatMoney(order.processingFee) }, { label: "Total", value: <span className="text-base font-semibold">{formatMoney(order.total)}</span> }, { label: "Payment status", value: order.paymentStatus || "—" },
               { label: "Estimated delivery", value: order.estimatedDelivery ? formatDateTime(order.estimatedDelivery) : "—" }, { label: "Last updated", value: formatDateTime(order.updatedAt) }, { label: "Record ID", value: order._id, mono: true },
             ]} />
           </section>
@@ -147,7 +147,7 @@ export default function OrdersPage() {
     <>
       <PageHeader title="Orders" description="Every Marketplace master order with its per-pharmacy fulfilments. Status is synchronised from the pharmacy app." onRefresh={refetch} refreshing={loading} updatedAt={updatedAt}
         actions={<Button variant="secondary" size="sm" disabled={!rows.length} onClick={() => downloadCsv(`orders-${new Date().toISOString().slice(0, 10)}.csv`, [
-          { header: "Order ID", value: "orderId" }, { header: "Placed", value: (r) => formatDateTime(r.createdAt) }, { header: "Customer", value: (r) => r.customer?.name || r.deliveryAddress?.fullName || "Guest" }, { header: "Email", value: (r) => r.customer?.email || "" }, { header: "City", value: (r) => r.deliveryAddress?.city || "" }, { header: "Pharmacies", value: (r) => (r.fulfillments || []).map((f) => f.pharmacyName).join("; ") }, { header: "Status", value: "status" }, { header: "Payment", value: "paymentMethod" }, { header: "Subtotal", value: "subtotal" }, { header: "Tax", value: "tax" }, { header: "Delivery", value: "deliveryFee" }, { header: "Total", value: "total" },
+          { header: "Order ID", value: "orderId" }, { header: "Placed", value: (r) => formatDateTime(r.createdAt) }, { header: "Customer", value: (r) => r.customer?.name || r.deliveryAddress?.fullName || "Guest" }, { header: "Email", value: (r) => r.customer?.email || "" }, { header: "City", value: (r) => r.deliveryAddress?.city || "" }, { header: "Pharmacies", value: (r) => (r.fulfillments || []).map((f) => f.pharmacyName).join("; ") }, { header: "Status", value: "status" }, { header: "Payment", value: "paymentMethod" }, { header: "Subtotal", value: "subtotal" }, { header: "Delivery", value: "deliveryFee" }, { header: "Processing", value: "processingFee" }, { header: "Total", value: "total" },
         ], rows)}><Download className="h-3.5 w-3.5" /> Export CSV</Button>} />
 
       <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

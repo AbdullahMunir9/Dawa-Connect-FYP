@@ -43,7 +43,6 @@ export const AppProvider = ({ children }) => {
     status: 'Open',
     approvalStatus: 'unapproved',
     logo: '💊',
-    taxRate: 5,
     bankName: '',
     accountNo: '',
     deliveryType: 'Self Delivery'

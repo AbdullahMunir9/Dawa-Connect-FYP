@@ -121,10 +121,9 @@ function CheckoutContent() {
   }, [user]);
 
   const subtotal = selectedCart?.subtotal || 0;
-  const tax = selectedCart?.tax || 0;
   const processingFee = selectedCart?.processingFee || 0;
   const deliveryFee = selectedCart?.deliveryFee || 0;
-  const total = subtotal + tax + processingFee + deliveryFee;
+  const total = subtotal + processingFee + deliveryFee;
   const selectedAddress = addresses.find((address) => String(address._id) === String(selectedAddressId));
   const usingSavedAddress = Boolean(user && addressMode === "saved");
   const manualAddressValid = ["fullName", "phone", "line1", "city"].every(
@@ -492,11 +491,7 @@ function CheckoutContent() {
                 <span className="text-teal-600 font-medium">{deliveryFee === 0 ? "FREE" : formatPKR(deliveryFee)}</span>
               </div>
               <div className="flex justify-between items-center text-gray-600">
-                <span>Pharmacy Tax</span>
-                <span>{formatPKR(tax)}</span>
-              </div>
-              <div className="flex justify-between items-center text-gray-600">
-                <span>Processing Fee</span>
+                <span>Processing</span>
                 <span>{formatPKR(processingFee)}</span>
               </div>
             </div>

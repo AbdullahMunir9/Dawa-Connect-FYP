@@ -74,7 +74,6 @@ const UserSchema = new mongoose.Schema(
         pharmacyName: { type: String, trim: true, default: "" },
         timing: { type: String, trim: true, default: "" },
         deliveryCharge: { type: Number, default: 0 },
-        taxRate: { type: Number, default: 0 },
         deliveryType: { type: String, trim: true, default: "" },
         price: { type: Number, default: 0 },
         quantity: { type: Number, min: 1, default: 1 },

@@ -1,6 +1,7 @@
 import { distanceKm, validateCoordinates } from './healthcareGeo.mjs';
+import { PLATFORM_PROCESSING_FEE, processingFeeFor } from './pricing.mjs';
 
-export const SEARCH_PROCESSING_FEE = 100;
+export const SEARCH_PROCESSING_FEE = PLATFORM_PROCESSING_FEE;
 
 function amount(value) {
   return Math.max(0, Number(value) || 0);
@@ -61,15 +62,13 @@ export function assessPharmacyDelivery(pharmacy, destination) {
 
 export function checkoutEstimate(product) {
   const subtotal = amount(product?.price);
-  const tax = money(subtotal * (amount(product?.taxRate) / 100));
   const deliveryFee = amount(product?.deliveryCharge);
-  const processingFee = subtotal > 0 ? SEARCH_PROCESSING_FEE : 0;
+  const processingFee = processingFeeFor(subtotal);
   return {
     subtotal,
-    tax,
     deliveryFee,
     processingFee,
-    total: money(subtotal + tax + deliveryFee + processingFee),
+    total: money(subtotal + deliveryFee + processingFee),
   };
 }
 

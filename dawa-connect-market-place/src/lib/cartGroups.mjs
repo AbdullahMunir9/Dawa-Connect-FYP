@@ -1,4 +1,4 @@
-const PROCESSING_FEE = 100;
+import { PLATFORM_PROCESSING_FEE, processingFeeFor } from "./pricing.mjs";
 
 function amount(value) {
   return Math.max(0, Number(value) || 0);
@@ -29,21 +29,16 @@ export function groupCartItemsByPharmacy(items) {
       (sum, item) => sum + amount(item.price) * Math.max(1, Number(item.quantity) || 1),
       0,
     );
-    const tax = group.items.reduce(
-      (sum, item) => sum + (amount(item.price) * Math.max(1, Number(item.quantity) || 1) * amount(item.taxRate)) / 100,
-      0,
-    );
     const deliveryFee = amount(group.items[0]?.deliveryCharge);
-    const processingFee = subtotal > 0 ? PROCESSING_FEE : 0;
+    const processingFee = processingFeeFor(subtotal);
 
     return {
       ...group,
       itemCount,
       subtotal,
-      tax,
       deliveryFee,
       processingFee,
-      total: subtotal + tax + deliveryFee + processingFee,
+      total: subtotal + deliveryFee + processingFee,
     };
   });
 }
@@ -62,4 +57,4 @@ export function assertSinglePharmacyItems(items) {
   return pharmacyIds.size === 1 ? [...pharmacyIds][0] : null;
 }
 
-export const CART_PROCESSING_FEE = PROCESSING_FEE;
+export const CART_PROCESSING_FEE = PLATFORM_PROCESSING_FEE;

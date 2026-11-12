@@ -27,14 +27,13 @@ export default function ProductPurchaseCard({ product }) {
       timing: product.timing,
       deliveryCharge: product.deliveryCharge,
       deliveryType: product.deliveryType,
-      taxRate: product.taxRate,
     });
     setAdded(true);
   }
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-6">
-      <p className="text-sm text-gray-500">Order total before delivery and tax</p>
+      <p className="text-sm text-gray-500">Order total before delivery and processing</p>
       <p className="text-2xl font-bold text-blue-900 mt-1">{formatPKR(product.price * quantity)}</p>
 
       <div className="flex items-center border border-gray-300 rounded-lg mt-5 overflow-hidden">

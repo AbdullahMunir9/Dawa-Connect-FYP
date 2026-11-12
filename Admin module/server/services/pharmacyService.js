@@ -249,7 +249,7 @@ async function seedInitialData(db, ownerId, payload, session = null) {
       email: payload.email, license: payload.licenseNumber,
       hours: `${payload.openingTime || '08:00'} - ${payload.closingTime || '22:00'}`,
       deliveryCharge: Number(payload.deliveryCharge || 50), deliveryRadius: Number(payload.serviceRadiusKm || 10),
-      ...coordinates, status: 'Open', approvalStatus: 'unapproved', logo: '💊', taxRate: 5, photos: {},
+      ...coordinates, status: 'Open', approvalStatus: 'unapproved', logo: '💊', photos: {},
       bankName: 'HBL', accountNo: '', createdAt: now, updatedAt: now,
     } },
     { upsert: true, ...(session ? { session } : {}) },
@@ -861,7 +861,7 @@ export async function getProfile(ownerId) {
       ownerId, name: user.pharmacyName || 'My Pharmacy', address: user.addressLine1 || '', phone: user.phone || '',
       email: user.email || '', license: user.licenseNumber || '', hours: `${user.openingTime || '08:00'} - ${user.closingTime || '22:00'}`,
       deliveryCharge: Number(user.deliveryCharge || 50), deliveryRadius: Number(user.serviceRadiusKm || 10),
-      status: 'Open', approvalStatus, logo: '💊', taxRate: 5, bankName: '', accountNo: '',
+      status: 'Open', approvalStatus, logo: '💊', bankName: '', accountNo: '',
       latitude: user.latitude, longitude: user.longitude, location: user.location, photos: {}, createdAt: now, updatedAt: now,
     };
     const result = await db.collection('profiles').insertOne(profile);
@@ -879,11 +879,11 @@ export async function getProfile(ownerId) {
 export async function updateProfile(ownerId, changes) {
   const db = await pharmacyDatabase();
   const existing = await getProfile(ownerId);
-  const allowed = ['name', 'address', 'hours', 'status', 'logo', 'deliveryCharge', 'deliveryRadius', 'deliveryType', 'taxRate', 'bankName', 'accountNo'];
+  const allowed = ['name', 'address', 'hours', 'status', 'logo', 'deliveryCharge', 'deliveryRadius', 'deliveryType', 'bankName', 'accountNo'];
   const patch = {};
   for (const key of allowed) {
     if (!Object.hasOwn(changes || {}, key)) continue;
-    patch[key] = ['deliveryCharge', 'deliveryRadius', 'taxRate'].includes(key) ? Number(changes[key]) : String(changes[key] ?? '').trim();
+    patch[key] = ['deliveryCharge', 'deliveryRadius'].includes(key) ? Number(changes[key]) : String(changes[key] ?? '').trim();
   }
   patch.updatedAt = new Date();
   await db.collection('profiles').updateOne({ _id: objectId(existing._id, 'profile'), ownerId }, { $set: patch });

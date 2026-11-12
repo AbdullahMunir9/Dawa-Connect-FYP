@@ -73,7 +73,7 @@ function AllCarts({ carts }) {
               </div>
               <div className="text-right text-xs text-gray-500">
                 <p>{cart.deliveryFee ? `${formatPKR(cart.deliveryFee)} delivery` : "Free delivery"}</p>
-                <p className="mt-1">Tax and processing included</p>
+                <p className="mt-1">Delivery and processing included</p>
               </div>
             </div>
             <Link href={`/cart?pharmacyId=${encodeURIComponent(cart.pharmacyId)}`} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-blue-900 px-4 py-3 text-sm font-bold text-blue-900 transition hover:bg-blue-900 hover:text-white">
@@ -124,7 +124,6 @@ function PharmacyCart({ cart, updateQuantity, removeFromCart }) {
           <p className="mt-1 text-sm text-gray-500">Only products from {cart.pharmacyName} are included.</p>
           <dl className="mt-6 space-y-3 text-sm">
             <div className="flex justify-between text-gray-600"><dt>Subtotal ({cart.itemCount} items)</dt><dd>{formatPKR(cart.subtotal)}</dd></div>
-            <div className="flex justify-between text-gray-600"><dt>Pharmacy tax</dt><dd>{formatPKR(cart.tax)}</dd></div>
             <div className="flex justify-between text-gray-600"><dt>Delivery</dt><dd>{cart.deliveryFee ? formatPKR(cart.deliveryFee) : <span className="font-semibold text-teal-700">Free</span>}</dd></div>
             <div className="flex justify-between text-gray-600"><dt>Processing</dt><dd>{formatPKR(cart.processingFee)}</dd></div>
           </dl>

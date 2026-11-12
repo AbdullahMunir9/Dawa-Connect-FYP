@@ -33,7 +33,7 @@ function OptimalPharmacyCard({ item, destination, onAdd, loading }) {
   if (!destination) {
     return (
       <div className="mt-4 rounded-2xl border border-dashed border-blue-200 bg-blue-50/60 px-5 py-4 text-sm text-blue-900">
-        <strong>Want the best local price?</strong> Choose the address where you want delivery and we’ll compare product price, tax, delivery and processing charges.
+        <strong>Want the best local price?</strong> Choose the address where you want delivery and we’ll compare product price, delivery and processing charges.
       </div>
     );
   }
@@ -249,7 +249,6 @@ function SearchResultsGridInner() {
     timing: item.timing,
     deliveryCharge: item.deliveryCharge,
     deliveryType: item.deliveryType,
-    taxRate: item.taxRate,
   });
 
   return (

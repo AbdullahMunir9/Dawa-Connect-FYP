@@ -133,7 +133,7 @@ export default function Home() {
     addToCart({
       cartItemId: `${product.pharmacyId}-${product.id}`, id: product.id, productId: product.id, name: product.name, price: product.price, quantity: 1,
       image: product.image, category: product.category, pharmacyId: product.pharmacyId, pharmacyName: product.pharmacyName, timing: product.timing,
-      deliveryCharge: product.deliveryCharge, deliveryType: product.deliveryType, taxRate: product.taxRate,
+      deliveryCharge: product.deliveryCharge, deliveryType: product.deliveryType,
     });
     setAddedId(product.id);
     setTimeout(() => setAddedId((current) => (current === product.id ? null : current)), 1600);

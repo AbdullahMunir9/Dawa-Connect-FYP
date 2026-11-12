@@ -258,7 +258,7 @@ function InvoiceModal({ order, pharmacy, onClose }) {
             <tbody>
               {order.items.map((item, i) => <tr key={i}><td>{item.name}</td><td>{item.qty}</td><td>{item.price}</td><td style={{ fontWeight: 600 }}>PKR {item.qty * item.price}</td></tr>)}
               <tr><td colSpan={3} style={{ textAlign: 'right', fontWeight: 600 }}>Delivery</td><td>PKR {Number(order.deliveryFee ?? pharmacy.deliveryCharge ?? 0).toLocaleString()}</td></tr>
-              <tr><td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, color: '#0f766e' }}>Tax</td><td>PKR {Number(order.tax ?? 0).toLocaleString()}</td></tr>
+              {Number(order.tax || 0) > 0 && <tr><td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, color: '#0f766e' }}>Historical adjustment</td><td>PKR {Number(order.tax).toLocaleString()}</td></tr>}
               <tr style={{ background: '#f0fdfa' }}><td colSpan={3} style={{ textAlign: 'right', fontWeight: 800 }}>TOTAL</td><td style={{ fontWeight: 800, color: '#0f766e' }}>PKR {order.total.toLocaleString()}</td></tr>
             </tbody>
           </table>

@@ -121,7 +121,6 @@ function calculateMonth(month, orders, inventory, timeZone) {
   const delivered = monthOrders.filter((order) => String(order.status || '').toLowerCase() === DELIVERED_STATUS);
   const cancelled = monthOrders.filter((order) => String(order.status || '').toLowerCase() === CANCELLED_STATUS);
   const productRevenueTotal = money(delivered.reduce((sum, order) => sum + productRevenue(order), 0));
-  const tax = money(delivered.reduce((sum, order) => sum + decimal(order.tax), 0));
   const deliveryFees = money(delivered.reduce((sum, order) => sum + decimal(order.deliveryFee), 0));
   const grossCollected = money(delivered.reduce((sum, order) => sum + decimal(order.total), 0));
   const unitsSold = delivered.reduce((sum, order) => sum + (order.items || [])
@@ -212,7 +211,6 @@ function calculateMonth(month, orders, inventory, timeZone) {
       cancelledOrders: cancelled.length,
       cancellationRate: monthOrders.length ? Math.round((cancelled.length / monthOrders.length) * 1000) / 10 : 0,
       productRevenue: productRevenueTotal,
-      tax,
       deliveryFees,
       grossCollected,
       averageOrderValue: delivered.length ? money(grossCollected / delivered.length) : 0,
