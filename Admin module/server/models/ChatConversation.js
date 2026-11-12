@@ -19,9 +19,12 @@ const chatConversationSchema = new mongoose.Schema({
   pharmacyUnreadCount: { type: Number, default: 0, min: 0 },
   customerLastReadAt: { type: Date, default: null },
   pharmacyLastReadAt: { type: Date, default: null },
+  // Null for registered customers. Guest conversations are removed by MongoDB's TTL monitor.
+  expiresAt: { type: Date, default: null },
 }, { timestamps: true, collection: 'order_conversations' });
 
 chatConversationSchema.index({ customerId: 1, lastMessageAt: -1 });
 chatConversationSchema.index({ pharmacyId: 1, lastMessageAt: -1 });
+chatConversationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export default mongoose.models.ChatConversation || mongoose.model('ChatConversation', chatConversationSchema);

@@ -6,6 +6,28 @@ export const CHAT_ACTIVE_ORDER_STATUSES = new Set([
   'Dispatched',
 ]);
 
+export const GUEST_CHAT_RETENTION_DAYS = 15;
+export const GUEST_CHAT_RETENTION_MS = GUEST_CHAT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+function validDate(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+export function resolveGuestChatExpiresAt(order) {
+  const explicit = validDate(order?.guestAccessExpiresAt);
+  if (explicit) return explicit;
+  const createdAt = validDate(order?.createdAt);
+  if (!createdAt) throw Object.assign(new Error('Guest chat expiry could not be determined.'), { status: 500 });
+  return new Date(createdAt.getTime() + GUEST_CHAT_RETENTION_MS);
+}
+
+export function isGuestChatExpired(order, now = new Date()) {
+  const current = validDate(now);
+  if (!current) throw new TypeError('A valid current date is required.');
+  return resolveGuestChatExpiresAt(order).getTime() <= current.getTime();
+}
+
 export function isChatWritableStatus(status) {
   return CHAT_ACTIVE_ORDER_STATUSES.has(String(status || ''));
 }

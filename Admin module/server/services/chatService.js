@@ -6,8 +6,10 @@ import User from '../models/User.js';
 import {
   deriveOrderChatDetails,
   identityCanAccessConversation,
+  isGuestChatExpired,
   isChatWritableStatus,
   normalizeChatText,
+  resolveGuestChatExpiresAt,
 } from './chatPolicy.js';
 
 export class ChatError extends Error {
@@ -53,6 +55,7 @@ function conversationView(conversation) {
     lastMessagePreview: doc.lastMessagePreview || '',
     customerUnreadCount: Number(doc.customerUnreadCount || 0),
     pharmacyUnreadCount: Number(doc.pharmacyUnreadCount || 0),
+    expiresAt: doc.expiresAt || null,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
@@ -78,6 +81,9 @@ async function assertOrderOwnership(identity, orderId) {
     if (identity.orderId !== String(order.orderId) || identity.sub !== expectedSubject || order.userId) {
       throw new ChatError('You cannot access this guest order chat.', 403, 'FORBIDDEN');
     }
+    if (isGuestChatExpired(order)) {
+      throw new ChatError('This guest order chat expired after 15 days.', 410, 'GUEST_CHAT_EXPIRED');
+    }
     return { order, customerName: order.deliveryAddress?.fullName || 'Guest customer' };
   }
 
@@ -85,17 +91,32 @@ async function assertOrderOwnership(identity, orderId) {
 }
 
 async function syncConversationState(conversation) {
-  const order = await Order.findById(conversation.marketplaceOrderId).select('status fulfillments pharmacyId pharmacyName pharmacyOrderId');
+  const order = await Order.findById(conversation.marketplaceOrderId)
+    .select('status fulfillments pharmacyId pharmacyName pharmacyOrderId userId guestAccessExpiresAt createdAt');
   if (!order) return conversation;
+  const isGuest = !order.userId;
+  const expiresAt = isGuest ? resolveGuestChatExpiresAt(order) : null;
+  if (isGuest && isGuestChatExpired(order)) {
+    await Promise.all([
+      ChatMessage.deleteMany({ conversationId: conversation._id }),
+      ChatConversation.deleteOne({ _id: conversation._id }),
+    ]);
+    throw new ChatError('This guest order chat expired after 15 days.', 410, 'GUEST_CHAT_EXPIRED');
+  }
   const details = deriveOrderChatDetails(order);
   const writable = isChatWritableStatus(details.orderStatus);
   const nextStatus = writable ? 'active' : 'read_only';
-  if (conversation.orderStatus !== details.orderStatus || conversation.status !== nextStatus) {
+  const expiryChanged = String(conversation.expiresAt || '') !== String(expiresAt || '');
+  if (conversation.orderStatus !== details.orderStatus || conversation.status !== nextStatus || expiryChanged) {
     conversation.orderStatus = details.orderStatus;
     conversation.status = nextStatus;
     conversation.closedReason = writable ? '' : details.orderStatus.toLowerCase().replace(/\s+/g, '_');
     conversation.closedAt = writable ? null : (conversation.closedAt || new Date());
+    conversation.expiresAt = expiresAt;
     await conversation.save();
+    if (expiresAt) {
+      await ChatMessage.updateMany({ conversationId: conversation._id }, { $set: { expiresAt } });
+    }
   }
   return conversation;
 }
@@ -105,6 +126,7 @@ export async function openOrderConversation(identity, orderId) {
     const { order, customerName } = await assertOrderOwnership(identity, orderId);
     const details = deriveOrderChatDetails(order);
     const writable = isChatWritableStatus(details.orderStatus);
+    const expiresAt = identity.role === 'guest' ? resolveGuestChatExpiresAt(order) : null;
     const insert = {
       marketplaceOrderId: order._id,
       orderId: order.orderId,
@@ -124,6 +146,7 @@ export async function openOrderConversation(identity, orderId) {
           status: writable ? 'active' : 'read_only',
           closedReason: writable ? '' : details.orderStatus.toLowerCase().replace(/\s+/g, '_'),
           closedAt: writable ? null : new Date(),
+          expiresAt,
         },
       },
       { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
@@ -162,6 +185,10 @@ export async function openPharmacyOrderConversation(identity, orderReference) {
       throw new ChatError('Chat can only be started while an order is ongoing.', 409, 'CHAT_READ_ONLY');
     }
     const hasCustomerAccount = Boolean(order.userId && mongoose.isValidObjectId(order.userId));
+    const expiresAt = hasCustomerAccount ? null : resolveGuestChatExpiresAt(order);
+    if (!hasCustomerAccount && isGuestChatExpired(order)) {
+      throw new ChatError('This guest order chat expired after 15 days.', 410, 'GUEST_CHAT_EXPIRED');
+    }
     const insert = {
       marketplaceOrderId: order._id,
       orderId: order.orderId,
@@ -176,7 +203,7 @@ export async function openPharmacyOrderConversation(identity, orderReference) {
       { marketplaceOrderId: order._id },
       {
         $setOnInsert: insert,
-        $set: { orderStatus: details.orderStatus, status: 'active', closedReason: '', closedAt: null },
+        $set: { orderStatus: details.orderStatus, status: 'active', closedReason: '', closedAt: null, expiresAt },
       },
       { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
     );
@@ -197,8 +224,15 @@ export async function listConversations(identity) {
   else throw new ChatError('Invalid chat identity.', 401, 'UNAUTHORIZED');
 
   const conversations = await ChatConversation.find(filter).sort({ lastMessageAt: -1, createdAt: -1 }).limit(200);
-  const synced = await Promise.all(conversations.map((conversation) => syncConversationState(conversation)));
-  return synced.map(conversationView);
+  const synced = await Promise.all(conversations.map(async (conversation) => {
+    try {
+      return await syncConversationState(conversation);
+    } catch (error) {
+      if (error instanceof ChatError && error.code === 'GUEST_CHAT_EXPIRED') return null;
+      throw error;
+    }
+  }));
+  return synced.filter(Boolean).map(conversationView);
 }
 
 export async function getConversation(identity, conversationId) {
@@ -238,6 +272,7 @@ export async function sendMessage(identity, conversationId, { text, clientMessag
       senderType: identity.role,
       clientMessageId: idempotencyKey,
       text: normalizedText,
+      expiresAt: conversation.expiresAt || null,
     });
     created = true;
   } catch (error) {

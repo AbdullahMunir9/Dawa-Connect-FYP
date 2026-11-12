@@ -15,6 +15,7 @@ import resendMonthlyReportWebhookRoutes from './routes/resendMonthlyReportWebhoo
 import pharmacyDb from './db/pharmacyConnection.js';
 import { configureChatSocket } from './sockets/chatSocket.js';
 import { startPharmacyNotificationStream } from './services/pharmacyNotificationStream.js';
+import { initializeGuestChatRetention } from './services/chatRetentionService.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -94,7 +95,14 @@ app.use((error, _req, res, _next) => {
 });
 
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('Connected to MarketPlace MongoDB'))
+  .then(async () => {
+    console.log('Connected to MarketPlace MongoDB');
+    try {
+      await initializeGuestChatRetention();
+    } catch (error) {
+      console.error('Guest chat retention initialization error:', error.message);
+    }
+  })
   .catch((err) => console.error('MarketPlace MongoDB connection error:', err.message));
 
 pharmacyDb.on('connected', () => console.log('Connected to Pharmacy MongoDB'));

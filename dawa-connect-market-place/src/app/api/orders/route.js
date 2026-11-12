@@ -4,6 +4,11 @@ import { createHash, randomBytes } from "crypto";
 import connectToDatabase from "@/lib/mongodb";
 import { CommerceError, createCommerceOrder } from "@/lib/commerce";
 import Order from "@/models/Order";
+import {
+  GUEST_ORDER_ACCESS_DAYS,
+  GUEST_ORDER_ACCESS_MS,
+  calculateGuestAccessExpiresAt,
+} from "@/lib/guestOrderAccess.mjs";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const key = JWT_SECRET ? new TextEncoder().encode(JWT_SECRET) : null;
@@ -33,7 +38,18 @@ export async function GET(req) {
     const guestToken = req.cookies.get(GUEST_ORDER_COOKIE)?.value;
     const permittedOwners = [];
     if (userId) permittedOwners.push({ userId });
-    if (guestToken) permittedOwners.push({ guestSessionHash: hashGuestToken(guestToken) });
+    if (guestToken) {
+      const now = new Date();
+      const legacyCutoff = new Date(now.getTime() - GUEST_ORDER_ACCESS_MS);
+      permittedOwners.push({
+        guestSessionHash: hashGuestToken(guestToken),
+        $or: [
+          { guestAccessExpiresAt: { $gt: now } },
+          { guestAccessExpiresAt: { $exists: false }, createdAt: { $gt: legacyCutoff } },
+          { guestAccessExpiresAt: null, createdAt: { $gt: legacyCutoff } },
+        ],
+      });
+    }
 
     if (orderId) {
       if (!permittedOwners.length) {
@@ -75,9 +91,11 @@ export async function POST(req) {
     const guestToken = userId
       ? null
       : existingGuestToken || randomBytes(32).toString("hex");
+    const guestAccessExpiresAt = guestToken ? calculateGuestAccessExpiresAt() : null;
     const order = await createCommerceOrder({
       userId,
       guestSessionHash: guestToken ? hashGuestToken(guestToken) : null,
+      guestAccessExpiresAt,
       items: body.items,
       addressId: body.addressId,
       deliveryAddress: body.deliveryAddress,
@@ -95,7 +113,7 @@ export async function POST(req) {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 30,
+        maxAge: 60 * 60 * 24 * GUEST_ORDER_ACCESS_DAYS,
         path: "/",
       });
     }

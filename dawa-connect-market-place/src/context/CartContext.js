@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2, ShoppingCart } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { groupCartItemsByPharmacy } from "@/lib/cartGroups.mjs";
 
@@ -29,14 +30,20 @@ function mergeItems(baseItems, incomingItems) {
 export function CartProvider({ children }) {
   const [items, setItems] = useState([]);
   const [isReady, setIsReady] = useState(false);
+  const [cartNoticeVisible, setCartNoticeVisible] = useState(false);
   const skipNextSyncRef = useRef(false);
   const prevUserIdRef = useRef(undefined);
   const itemsRef = useRef([]);
+  const cartNoticeTimerRef = useRef(null);
   const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
+
+  useEffect(() => () => {
+    if (cartNoticeTimerRef.current) clearTimeout(cartNoticeTimerRef.current);
+  }, []);
 
   useEffect(() => {
     try {
@@ -126,7 +133,16 @@ export function CartProvider({ children }) {
     syncUserCart();
   }, [user?.id, authLoading, isReady]);
 
-  const addToCart = (item) => {
+  const showCartNotice = useCallback(() => {
+    if (cartNoticeTimerRef.current) clearTimeout(cartNoticeTimerRef.current);
+    setCartNoticeVisible(true);
+    cartNoticeTimerRef.current = setTimeout(() => {
+      setCartNoticeVisible(false);
+      cartNoticeTimerRef.current = null;
+    }, 3000);
+  }, []);
+
+  const addToCart = useCallback((item) => {
     if (!item?.cartItemId) return;
     setItems((prev) => {
       const index = prev.findIndex((existing) => existing.cartItemId === item.cartItemId);
@@ -136,7 +152,8 @@ export function CartProvider({ children }) {
       next[index] = { ...next[index], quantity: next[index].quantity + (item.quantity || 1) };
       return next;
     });
-  };
+    showCartNotice();
+  }, [showCartNotice]);
 
   const updateQuantity = (cartItemId, nextQuantity) => {
     setItems((prev) =>
@@ -164,10 +181,32 @@ export function CartProvider({ children }) {
 
   const value = useMemo(
     () => ({ items, pharmacyCarts, isReady, addToCart, updateQuantity, removeFromCart, clearCart, clearPharmacyCart, totalItems }),
-    [items, pharmacyCarts, isReady, totalItems]
+    [items, pharmacyCarts, isReady, addToCart, totalItems]
   );
 
-  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
+  return (
+    <CartContext.Provider value={value}>
+      {children}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className={`fixed left-4 right-4 top-20 z-[100] mx-auto max-w-sm transition-all duration-200 sm:left-auto sm:right-6 sm:top-24 sm:mx-0 ${
+          cartNoticeVisible
+            ? "translate-y-0 opacity-100"
+            : "pointer-events-none -translate-y-3 opacity-0"
+        }`}
+      >
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white px-4 py-3.5 shadow-xl shadow-slate-900/10">
+          <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+            <ShoppingCart className="h-5 w-5" />
+            <CheckCircle2 className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-white text-emerald-600" />
+          </span>
+          <p className="text-sm font-semibold text-slate-900">Item added to the cart</p>
+        </div>
+      </div>
+    </CartContext.Provider>
+  );
 }
 
 export function useCart() {

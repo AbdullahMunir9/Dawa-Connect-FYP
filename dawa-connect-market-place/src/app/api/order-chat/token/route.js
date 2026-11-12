@@ -5,6 +5,11 @@ import { NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongodb";
 import Order from "@/models/Order";
 import User from "@/models/User";
+import {
+  GUEST_ORDER_ACCESS_DAYS,
+  isGuestAccessExpired,
+  resolveGuestAccessExpiresAt,
+} from "@/lib/guestOrderAccess.mjs";
 
 const GUEST_ORDER_COOKIE = "guest_order_token";
 
@@ -41,11 +46,12 @@ export async function POST(req) {
 
     await connectToDatabase();
     const userId = await marketplaceIdentity(req);
-    const order = await Order.findOne({ orderId: normalizedOrderId }).select("+guestSessionHash");
+    const order = await Order.findOne({ orderId: normalizedOrderId }).select("+guestSessionHash guestAccessExpiresAt createdAt");
     if (!order) return NextResponse.json({ message: "Order not found." }, { status: 404 });
 
     let subject;
     let role;
+    let guestHistoryExpiresAt = null;
     if (userId && String(order.userId || "") === userId) {
       const user = await User.findById(userId).select("status").lean();
       if (!user || String(user.status || "active").toLowerCase() === "suspended") {
@@ -60,8 +66,15 @@ export async function POST(req) {
         && order.guestSessionHash
         && guestHash(guestToken) === order.guestSessionHash;
       if (!matchesGuest) return NextResponse.json({ message: "You cannot access this order chat." }, { status: 403 });
+      if (isGuestAccessExpired(order)) {
+        return NextResponse.json(
+          { message: "This guest order chat expired after 15 days. Sign in before placing future orders to keep permanent chat history." },
+          { status: 410 },
+        );
+      }
       subject = `guest:${String(order._id)}`;
       role = "guest";
+      guestHistoryExpiresAt = resolveGuestAccessExpiresAt(order).toISOString();
     }
 
     const chatToken = await new SignJWT({ role, orderId: String(order.orderId) })
@@ -74,7 +87,14 @@ export async function POST(req) {
       .sign(chatKey);
 
     return NextResponse.json(
-      { token: chatToken, serviceUrl, expiresInSeconds: 900 },
+      {
+        token: chatToken,
+        serviceUrl,
+        expiresInSeconds: 900,
+        role,
+        guestHistoryExpiresAt,
+        guestHistoryRetentionDays: role === "guest" ? GUEST_ORDER_ACCESS_DAYS : null,
+      },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

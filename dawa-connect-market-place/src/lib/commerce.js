@@ -100,6 +100,7 @@ function normalizeDeliveryAddress(address) {
 export async function createCommerceOrder({
   userId,
   guestSessionHash,
+  guestAccessExpiresAt,
   items,
   addressId,
   deliveryAddress: suppliedAddress,
@@ -110,6 +111,10 @@ export async function createCommerceOrder({
   const isGuestCustomer = /^[a-f0-9]{64}$/.test(String(guestSessionHash || ""));
   if (!isRegisteredCustomer && !isGuestCustomer) {
     throw new CommerceError("A customer session is required", 401, "UNAUTHORIZED");
+  }
+  const normalizedGuestAccessExpiry = isGuestCustomer ? new Date(guestAccessExpiresAt) : null;
+  if (isGuestCustomer && !Number.isFinite(normalizedGuestAccessExpiry.getTime())) {
+    throw new CommerceError("A valid guest-session expiry is required", 400, "INVALID_GUEST_EXPIRY");
   }
   const requestedItems = normalizeItems(items);
   const normalizedPayment = String(paymentMethod || "cash").toLowerCase();
@@ -328,6 +333,7 @@ export async function createCommerceOrder({
         _id: marketplaceOrderObjectId,
         userId: customer?._id || null,
         guestSessionHash: customer ? "" : guestSessionHash,
+        guestAccessExpiresAt: customer ? null : normalizedGuestAccessExpiry,
         orderId,
         pharmacyId: fulfillments[0].pharmacyId,
         pharmacyName: fulfillments[0].pharmacyName,

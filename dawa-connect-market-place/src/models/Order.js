@@ -43,6 +43,7 @@ const OrderSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
     guestSessionHash: { type: String, default: "", index: true, select: false },
+    guestAccessExpiresAt: { type: Date, default: null, index: true },
     orderId: { type: String, required: true, unique: true },
     pharmacyId: { type: String, default: "", index: true },
     pharmacyName: { type: String, default: "" },

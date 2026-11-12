@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
-import { ArrowLeft, CheckCircle2, Loader2, LockKeyhole, MessageCircle, Send, Store } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock3, Loader2, LockKeyhole, MessageCircle, Send, Store, UserPlus } from "lucide-react";
 
 function emitWithAck(socket, event, payload) {
   return new Promise((resolve, reject) => {
@@ -35,6 +35,7 @@ export default function OrderChatClient({ orderId }) {
   const [sending, setSending] = useState(false);
   const [connectionState, setConnectionState] = useState("connecting");
   const [error, setError] = useState("");
+  const [chatAccess, setChatAccess] = useState({ role: null, guestHistoryExpiresAt: null, retentionDays: null });
 
   const getToken = useCallback(async () => {
     const response = await fetch("/api/order-chat/token", {
@@ -54,6 +55,11 @@ export default function OrderChatClient({ orderId }) {
       try {
         const credentials = await getToken();
         if (cancelled) return;
+        setChatAccess({
+          role: credentials.role || null,
+          guestHistoryExpiresAt: credentials.guestHistoryExpiresAt || null,
+          retentionDays: credentials.guestHistoryRetentionDays || null,
+        });
         const socket = io(credentials.serviceUrl, {
           auth: { token: credentials.token },
           // Start with HTTP long-polling, which works reliably through Vercel,
@@ -113,6 +119,13 @@ export default function OrderChatClient({ orderId }) {
           try {
             const refreshed = await getToken();
             socket.auth = { token: refreshed.token };
+            if (!cancelled) {
+              setChatAccess({
+                role: refreshed.role || null,
+                guestHistoryExpiresAt: refreshed.guestHistoryExpiresAt || null,
+                retentionDays: refreshed.guestHistoryRetentionDays || null,
+              });
+            }
           } catch {
             // The current connection remains valid; a visible error appears only if reconnection fails.
           }
@@ -141,6 +154,31 @@ export default function OrderChatClient({ orderId }) {
     const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
     if (distanceFromBottom < 180) element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
   }, [messages.length]);
+
+  useEffect(() => {
+    if (chatAccess.role !== "guest" || !chatAccess.guestHistoryExpiresAt) return undefined;
+    const expiresAt = new Date(chatAccess.guestHistoryExpiresAt).getTime();
+    if (!Number.isFinite(expiresAt)) return undefined;
+
+    const expireGuestChat = () => {
+      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+      setMessages([]);
+      setConversation(null);
+      setConnectionState("offline");
+      setError("This guest order chat expired after 15 days. Its history has been permanently removed.");
+    };
+
+    const remaining = expiresAt - Date.now();
+    if (remaining <= 0) {
+      expireGuestChat();
+      return undefined;
+    }
+    const timer = setTimeout(expireGuestChat, remaining);
+    return () => clearTimeout(timer);
+  }, [chatAccess.guestHistoryExpiresAt, chatAccess.role]);
 
   const sendMessage = async (event) => {
     event?.preventDefault();
@@ -181,6 +219,26 @@ export default function OrderChatClient({ orderId }) {
             {connectionState === "connected" ? "● Connected" : connectionState === "reconnecting" ? "Reconnecting…" : "Offline"}
           </div>
         </header>
+
+        {chatAccess.role === "guest" && (
+          <div className="border-b border-amber-200 bg-amber-50 px-5 py-4 text-amber-950 sm:px-6">
+            <div className="flex items-start gap-3">
+              <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+              <div className="min-w-0 text-sm leading-6">
+                <p className="font-semibold">Guest chat history is temporary.</p>
+                <p className="text-amber-900/90">
+                  This conversation will be permanently removed {chatAccess.guestHistoryExpiresAt
+                    ? `on ${new Date(chatAccess.guestHistoryExpiresAt).toLocaleDateString([], { day: "numeric", month: "long", year: "numeric" })}`
+                    : `after ${chatAccess.retentionDays || 15} days`}.
+                  {" "}Create an account and sign in before placing future orders to keep their chat history permanently.
+                </p>
+                <Link href="/signup" className="mt-1 inline-flex items-center gap-1.5 font-semibold text-blue-800 hover:text-blue-950">
+                  <UserPlus className="h-4 w-4" /> Create an account
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex flex-1 items-center justify-center text-gray-500"><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Opening secure conversation…</div>

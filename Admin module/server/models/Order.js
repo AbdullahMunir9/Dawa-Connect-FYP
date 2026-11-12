@@ -21,6 +21,7 @@ const orderSchema = new mongoose.Schema({
   orderId: { type: String, required: true },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   guestSessionHash: { type: String, select: false },
+  guestAccessExpiresAt: { type: Date, default: null },
   pharmacyId: { type: String, default: '' },
   pharmacyName: { type: String, default: '' },
   pharmacyOrderId: { type: String, default: '' },
