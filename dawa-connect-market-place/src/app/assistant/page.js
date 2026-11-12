@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Send, Bot, Loader2, LockKeyhole, Sparkles, RotateCcw, Copy, Check, ShieldAlert, Pill, AlertTriangle, HelpCircle, Stethoscope, ArrowDown } from "lucide-react";
+import { Send, Bot, Loader2, LockKeyhole, Sparkles, RotateCcw, Copy, Check, ShieldAlert, Pill, AlertTriangle, HelpCircle, Stethoscope, ArrowDown, ImagePlus, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/context/AuthContext";
 import { cn, initials } from "@/components/ui";
@@ -10,6 +10,10 @@ import { cn, initials } from "@/components/ui";
 /** ~24 characters/sec baseline; bursts when the network buffer is far ahead */
 const TYPEWRITER_MS = 42;
 const TYPEWRITER_BASE_STEP = 1;
+const MAX_IMAGES_PER_MESSAGE = 2;
+const MAX_SOURCE_IMAGE_BYTES = 12 * 1024 * 1024;
+const MAX_COMPRESSED_IMAGE_BYTES = 1_100_000;
+const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const GREETING = { role: "assistant", content: "Hello! I'm the DawaConnect Virtual Assistant. Ask me about a medicine, its side effects, or how to use the platform — I'll keep the answer clear and remind you when a pharmacist or doctor should have the final say." };
 
@@ -19,6 +23,72 @@ const SUGGESTIONS = [
   { icon: Stethoscope, title: "Interactions", prompt: "Can I take ibuprofen together with blood-pressure medicine? What should I watch out for?" },
   { icon: HelpCircle, title: "Using DawaConnect", prompt: "How do I track an order that was split between two pharmacies on DawaConnect?" },
 ];
+
+function readBlobAsDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("The image could not be read."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function canvasToJpeg(canvas, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("The image could not be compressed."))),
+      "image/jpeg",
+      quality,
+    );
+  });
+}
+
+async function prepareImage(file) {
+  if (!ACCEPTED_IMAGE_TYPES.has(file.type)) {
+    throw new Error("Only JPEG, PNG and WebP images can be attached.");
+  }
+  if (!file.size || file.size > MAX_SOURCE_IMAGE_BYTES) {
+    throw new Error("Choose an image smaller than 12 MB.");
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error("This image is damaged or unsupported."));
+      element.src = objectUrl;
+    });
+    const longestSide = Math.max(image.naturalWidth, image.naturalHeight);
+    const scale = Math.min(1, 1600 / Math.max(1, longestSide));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Your browser could not prepare this image.");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    let quality = 0.86;
+    let blob = await canvasToJpeg(canvas, quality);
+    while (blob.size > MAX_COMPRESSED_IMAGE_BYTES && quality > 0.42) {
+      quality -= 0.08;
+      blob = await canvasToJpeg(canvas, quality);
+    }
+    if (blob.size > MAX_COMPRESSED_IMAGE_BYTES) {
+      throw new Error("This image remains too large after compression. Choose a smaller image.");
+    }
+    return {
+      id: `${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
+      name: file.name.replace(/\.[^.]+$/, "") + ".jpg",
+      mimeType: "image/jpeg",
+      dataUrl: await readBlobAsDataUrl(blob),
+    };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 
 function displayMarkdown(content, streaming = false) {
   let text = String(content || "")
@@ -55,11 +125,21 @@ function QuotaMeter({ quota }) {
   if (!quota) return null;
   const used = Math.max(0, quota.limit - quota.remaining);
   const pct = quota.limit ? Math.min(100, Math.round((used / quota.limit) * 100)) : 0;
+  const imageLimit = quota.imageLimit || 6;
+  const imagesUsed = Math.max(0, quota.imagesUsed || 0);
+  const imagePct = Math.min(100, Math.round((imagesUsed / imageLimit) * 100));
   return (
-    <div>
-      <div className="flex items-center justify-between text-xs"><span className="font-semibold text-gray-700">Today's questions</span><span className="tabular-nums text-gray-500">{used} / {quota.limit}</span></div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100"><div className={cn("h-full rounded-full transition-all", pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-blue-600")} style={{ width: `${pct}%` }} /></div>
-      <p className="mt-1.5 text-[11px] text-gray-500">{quota.remaining === 0 ? "Limit reached — resets at midnight (PKT)." : `${quota.remaining} remaining · resets daily`}</p>
+    <div className="space-y-4">
+      <div>
+        <div className="flex items-center justify-between text-xs"><span className="font-semibold text-gray-700">Today's questions</span><span className="tabular-nums text-gray-500">{used} / {quota.limit}</span></div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100"><div className={cn("h-full rounded-full transition-all", pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-blue-600")} style={{ width: `${pct}%` }} /></div>
+        <p className="mt-1.5 text-[11px] text-gray-500">{quota.remaining === 0 ? "Limit reached — resets at midnight (PKT)." : `${quota.remaining} remaining · resets daily`}</p>
+      </div>
+      <div>
+        <div className="flex items-center justify-between text-xs"><span className="font-semibold text-gray-700">Today's images</span><span className="tabular-nums text-gray-500">{imagesUsed} / {imageLimit}</span></div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100"><div className={cn("h-full rounded-full transition-all", imagePct >= 100 ? "bg-red-500" : imagePct >= 67 ? "bg-amber-500" : "bg-violet-600")} style={{ width: `${imagePct}%` }} /></div>
+        <p className="mt-1.5 text-[11px] text-gray-500">{quota.imagesRemaining === 0 ? "Image limit reached — text questions still work." : `${quota.imagesRemaining} image uploads remaining`}</p>
+      </div>
     </div>
   );
 }
@@ -69,9 +149,13 @@ export default function AssistantPage() {
   const [messages, setMessages] = useState([GREETING]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isPreparingImages, setIsPreparingImages] = useState(false);
+  const [pendingImages, setPendingImages] = useState([]);
+  const [imageError, setImageError] = useState("");
   const [quota, setQuota] = useState(null);
   const messagesViewportRef = useRef(null);
   const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   /** Full text received from the API stream (may run ahead of what we show). */
   const streamTargetRef = useRef("");
@@ -130,20 +214,82 @@ export default function AssistantPage() {
     }, TYPEWRITER_MS);
   }, [clearTypewriter]);
 
+  const handleImageSelection = useCallback(async (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!files.length) return;
+
+    const availableToday = quota?.imagesRemaining ?? 6;
+    const availableInMessage = MAX_IMAGES_PER_MESSAGE - pendingImages.length;
+    const acceptedCount = Math.min(availableToday, availableInMessage);
+    if (acceptedCount <= 0) {
+      setImageError(
+        availableToday <= 0
+          ? "You have used today's 6 image uploads. You can still ask text questions."
+          : "A message can contain no more than 2 images.",
+      );
+      return;
+    }
+    if (files.length > acceptedCount) {
+      setImageError(
+        availableToday < files.length
+          ? `Only ${availableToday} image upload${availableToday === 1 ? "" : "s"} remain today.`
+          : "A message can contain no more than 2 images.",
+      );
+      return;
+    }
+
+    setImageError("");
+    setIsPreparingImages(true);
+    try {
+      const prepared = [];
+      for (const file of files) prepared.push(await prepareImage(file));
+      setPendingImages((current) => [...current, ...prepared]);
+    } catch (error) {
+      setImageError(error?.message || "The selected image could not be prepared.");
+    } finally {
+      setIsPreparingImages(false);
+    }
+  }, [pendingImages.length, quota?.imagesRemaining]);
+
+  const removePendingImage = useCallback((imageId) => {
+    setPendingImages((current) => current.filter((image) => image.id !== imageId));
+    setImageError("");
+  }, []);
+
   const sendMessage = useCallback(async (text) => {
     const content = text.trim();
-    if (!user || !content || isLoading || quota?.remaining === 0) return;
-    const userMessage = { role: "user", content };
+    if (!user || !content || isLoading || isPreparingImages || quota?.remaining === 0) return;
+    if (pendingImages.length > (quota?.imagesRemaining ?? 6)) {
+      setImageError("Your remaining daily image allowance is too low for these attachments.");
+      return;
+    }
+    const attachments = pendingImages.map(({ id, name, mimeType, dataUrl }) => ({
+      id,
+      name,
+      mimeType,
+      dataUrl,
+    }));
+    const userMessage = { role: "user", content, images: attachments };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput("");
+    setPendingImages([]);
+    setImageError("");
     setIsLoading(true);
     clearTypewriter();
     streamTargetRef.current = "";
     streamReadDoneRef.current = false;
 
     try {
-      const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: newMessages }) });
+      const requestMessages = newMessages.map((message, index) => ({
+        role: message.role,
+        content: message.content,
+        ...(index === newMessages.length - 1 && message.images?.length
+          ? { images: message.images.map(({ dataUrl }) => ({ dataUrl })) }
+          : {}),
+      }));
+      const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: requestMessages }) });
       if (!response.ok) {
         const isJson = response.headers.get("content-type")?.includes("application/json");
         const errorPayload = isJson ? await response.json() : { message: await response.text() };
@@ -152,7 +298,18 @@ export default function AssistantPage() {
       }
       const remainingHeader = response.headers.get("X-AI-Remaining");
       if (remainingHeader !== null) {
-        setQuota((current) => ({ ...(current || { limit: 20 }), remaining: Number(remainingHeader), used: Number(response.headers.get("X-AI-Limit") || 20) - Number(remainingHeader) }));
+        const imageRemainingHeader = response.headers.get("X-AI-Image-Remaining");
+        setQuota((current) => ({
+          ...(current || { limit: 20, imageLimit: 6 }),
+          remaining: Number(remainingHeader),
+          used: Number(response.headers.get("X-AI-Limit") || 20) - Number(remainingHeader),
+          ...(imageRemainingHeader !== null
+            ? {
+                imagesRemaining: Number(imageRemainingHeader),
+                imagesUsed: Number(response.headers.get("X-AI-Image-Limit") || 6) - Number(imageRemainingHeader),
+              }
+            : {}),
+        }));
       }
       if (!response.body) throw new Error("No response body");
 
@@ -183,11 +340,11 @@ export default function AssistantPage() {
       });
       setIsLoading(false);
     }
-  }, [user, isLoading, quota, messages, clearTypewriter, startTypewriterPump]);
+  }, [user, isLoading, isPreparingImages, quota, pendingImages, messages, clearTypewriter, startTypewriterPump]);
 
   const handleSubmit = (e) => { e.preventDefault(); void sendMessage(input); };
   const onKeyDown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(input); } };
-  const resetConversation = () => { if (isLoading) return; clearTypewriter(); setMessages([GREETING]); setInput(""); };
+  const resetConversation = () => { if (isLoading) return; clearTypewriter(); setMessages([GREETING]); setInput(""); setPendingImages([]); setImageError(""); };
   const jumpToLatest = () => {
     const viewport = messagesViewportRef.current;
     if (viewport) viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
@@ -238,7 +395,7 @@ export default function AssistantPage() {
 
             <div className="rounded-2xl border border-gray-200 bg-white p-5">
               <QuotaMeter quota={quota} />
-              {!quota && <p className="text-xs text-gray-500">Up to 20 questions per day.</p>}
+              {!quota && <p className="text-xs text-gray-500">Up to 20 questions and 6 image uploads per day.</p>}
             </div>
 
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
@@ -266,7 +423,18 @@ export default function AssistantPage() {
                     <span className={cn("mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold", isUser ? "bg-blue-700 text-white" : "bg-blue-50 text-blue-700")}>{isUser ? initials(user.name) : <Bot className="h-4 w-4" />}</span>
                     <div className={cn("max-w-[85%] sm:max-w-[75%]", isUser ? "items-end" : "items-start")}>
                       <div className={cn("rounded-2xl px-4 py-3 text-[14px] leading-relaxed", isUser ? "rounded-tr-md bg-blue-700 text-white" : "rounded-tl-md border border-gray-200 bg-white text-gray-800 shadow-sm")}>
-                        {isUser ? <p className="whitespace-pre-wrap">{msg.content}</p> : streaming ? (
+                        {isUser ? (
+                          <>
+                            {msg.images?.length > 0 && (
+                              <div className={cn("mb-2 grid gap-2", msg.images.length > 1 ? "grid-cols-2" : "grid-cols-1")}>
+                                {msg.images.map((image, imageIndex) => (
+                                  <img key={image.id || imageIndex} src={image.dataUrl} alt={`Attached image ${imageIndex + 1}`} className="max-h-48 w-full rounded-xl bg-white/10 object-cover ring-1 ring-white/25" />
+                                ))}
+                              </div>
+                            )}
+                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                          </>
+                        ) : streaming ? (
                           msg.content ? <div className="md-answer"><ReactMarkdown skipHtml>{displayMarkdown(msg.content, true)}</ReactMarkdown><span className="ml-0.5 inline-block h-4 w-0.5 translate-y-0.5 animate-pulse rounded-sm bg-blue-600" aria-hidden /></div>
                             : <span className="inline-flex items-center gap-1.5 text-gray-400"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" /></span>
                         ) : (
@@ -305,15 +473,32 @@ export default function AssistantPage() {
 
             <div className="border-t border-gray-100 bg-white p-3 sm:p-4">
               {limitReached && <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">You've used today's {quota.limit} questions. The limit resets at midnight.</p>}
-              <form onSubmit={handleSubmit} className="flex items-end gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-2 transition focus-within:border-blue-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20">
-                <textarea ref={textareaRef} rows={1} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown} disabled={isLoading || limitReached} maxLength={2000}
-                  placeholder={limitReached ? "Daily question limit reached" : "Ask about a medicine, a side effect, or how DawaConnect works…"}
-                  className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:cursor-not-allowed" aria-label="Message the assistant" />
-                <button type="submit" disabled={!input.trim() || isLoading || limitReached} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-700 text-white transition hover:bg-blue-800 disabled:opacity-40 disabled:hover:bg-blue-700" aria-label="Send">
-                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </button>
+              {imageError && <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{imageError}</p>}
+              <form onSubmit={handleSubmit} className="rounded-2xl border border-gray-200 bg-gray-50 p-2 transition focus-within:border-blue-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20">
+                {pendingImages.length > 0 && (
+                  <div className="flex flex-wrap gap-2 border-b border-gray-200 px-2 pb-2">
+                    {pendingImages.map((image, index) => (
+                      <div key={image.id} className="relative h-20 w-20 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                        <img src={image.dataUrl} alt={`Selected image ${index + 1}`} className="h-full w-full object-cover" />
+                        <button type="button" onClick={() => removePendingImage(image.id)} disabled={isLoading} className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-gray-950/75 text-white transition hover:bg-red-600 disabled:opacity-50" aria-label={`Remove image ${index + 1}`}><X className="h-3.5 w-3.5" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-end gap-2">
+                  <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={handleImageSelection} />
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading || isPreparingImages || limitReached || pendingImages.length >= MAX_IMAGES_PER_MESSAGE || quota?.imagesRemaining === 0} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-gray-500 transition hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-35" aria-label="Attach up to two images" title="Attach images">
+                    {isPreparingImages ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                  </button>
+                  <textarea ref={textareaRef} rows={1} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown} disabled={isLoading || limitReached} maxLength={2000}
+                    placeholder={limitReached ? "Daily question limit reached" : pendingImages.length ? "Ask a health question about the selected image…" : "Ask about a medicine, a side effect, or how DawaConnect works…"}
+                    className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:cursor-not-allowed" aria-label="Message the assistant" />
+                  <button type="submit" disabled={!input.trim() || isLoading || isPreparingImages || limitReached} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-700 text-white transition hover:bg-blue-800 disabled:opacity-40 disabled:hover:bg-blue-700" aria-label="Send">
+                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </button>
+                </div>
               </form>
-              <p className="mt-2 flex items-center justify-between gap-2 px-1 text-[11px] text-gray-400"><span><kbd className="rounded border border-gray-200 bg-white px-1">Enter</kbd> to send · <kbd className="rounded border border-gray-200 bg-white px-1">Shift</kbd>+<kbd className="rounded border border-gray-200 bg-white px-1">Enter</kbd> for a new line</span><span className="hidden sm:inline">General information only — not medical advice.</span></p>
+              <p className="mt-2 flex items-center justify-between gap-2 px-1 text-[11px] text-gray-400"><span>Up to 2 images per message · 6 per day</span><span className="hidden sm:inline">General information only — not medical advice.</span></p>
             </div>
           </section>
         </div>

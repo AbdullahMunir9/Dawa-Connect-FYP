@@ -10,6 +10,7 @@ const AiUsageSchema = new mongoose.Schema(
     },
     dayKey: { type: String, required: true },
     count: { type: Number, min: 0, default: 0 },
+    imageCount: { type: Number, min: 0, default: 0 },
     lastModel: { type: String, trim: true, default: "" },
   },
   { timestamps: true }
