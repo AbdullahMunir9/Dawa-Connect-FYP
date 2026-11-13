@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { recordSearchAndNavigate } from "@/lib/searchNavigation";
 import { authPageHref } from "@/lib/authRedirect.mjs";
 import VoiceMedicineSearchButton from "@/components/VoiceMedicineSearchButton";
+import UserAvatar from "@/components/UserAvatar";
 
 export default function Navbar() {
   const router = useRouter();
@@ -113,7 +114,7 @@ export default function Navbar() {
                 {user ? (
                   <div className="flex items-center gap-2">
                     <Link href="/dashboard" prefetch={false} className="hidden sm:flex text-gray-500 hover:text-gray-900 items-center gap-2">
-                      <User className="h-5 w-5" />
+                      <UserAvatar user={user} className="h-6 w-6 text-[10px]" fallbackClassName="bg-blue-50 text-blue-700" />
                       <span className="hidden md:inline text-sm font-medium">{user.name}</span>
                     </Link>
                     <button onClick={logout} className="text-sm font-medium text-red-600 hover:text-red-700 border border-red-200 px-3 py-1.5 rounded-md hover:bg-red-50 transition-colors">

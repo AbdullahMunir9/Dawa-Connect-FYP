@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openConversation: (payload) => ipcRenderer.invoke('chat:open-conversation', payload),
     join: (payload) => ipcRenderer.invoke('chat:join', payload),
     listMessages: (payload) => ipcRenderer.invoke('chat:list-messages', payload),
+    uploadImages: (payload) => ipcRenderer.invoke('chat:upload-images', payload),
     sendMessage: (payload) => ipcRenderer.invoke('chat:send-message', payload),
     markRead: (payload) => ipcRenderer.invoke('chat:mark-read', payload),
     onEvent: (callback) => {

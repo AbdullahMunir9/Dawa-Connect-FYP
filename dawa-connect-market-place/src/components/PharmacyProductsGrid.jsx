@@ -4,6 +4,7 @@ import { ShoppingCart } from "lucide-react";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import { formatPKR } from "@/lib/currency";
+import FavouriteButton from "@/components/FavouriteButton";
 
 export default function PharmacyProductsGrid({ pharmacy }) {
   const { addToCart } = useCart();
@@ -36,6 +37,7 @@ export default function PharmacyProductsGrid({ pharmacy }) {
             <div className="flex items-center justify-between gap-2">
               <p className="text-blue-900 font-bold">{formatPKR(product.price)}</p>
               <div className="flex items-center gap-2 shrink-0">
+                <FavouriteButton product={{ ...product, pharmacyId: pharmacy.id, pharmacyName: pharmacy.name }} />
                 <span
                   className={`text-xs font-medium px-2 py-1 rounded-full border ${
                     isInStock

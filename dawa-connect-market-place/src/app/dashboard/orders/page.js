@@ -1,15 +1,16 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, Filter, Truck, CheckCircle2, FileText, XCircle, ArrowRight, Download, RefreshCcw, Info, HelpCircle, ArrowLeftRight, ChevronLeft, ChevronRight, MessageCircle, MessageSquareWarning } from "lucide-react";
+import { Truck, CheckCircle2, FileText, XCircle, ArrowUpDown, MessageCircle, MessageSquareWarning } from "lucide-react";
 import { formatPKR } from "@/lib/currency";
 
 export default function OrderHistory() {
   const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [sortOrder, setSortOrder] = useState("newest");
 
   const fetchOrders = async () => {
     try {
@@ -31,11 +32,15 @@ export default function OrderHistory() {
     }
   }, [user]);
 
-  if (!user) return <div className="py-8 text-center text-red-500">Please log in.</div>;
-
-  const activeShipments = orders.filter(o => o.status === "Processing" || o.status === "Packed" || o.status === "Dispatched").length;
+  const sortedOrders = useMemo(() => [...orders].sort((a, b) => {
+    const difference = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    return sortOrder === "newest" ? difference : -difference;
+  }), [orders, sortOrder]);
+  const activeShipments = orders.filter(o => ["Confirmed", "Processing", "Packed", "Dispatched"].includes(o.status)).length;
   const completed = orders.filter(o => o.status === "Delivered").length;
   const cancelled = orders.filter(o => o.status === "Cancelled").length;
+
+  if (!user) return <div className="py-8 text-center text-red-500">Please log in.</div>;
 
   return (
     <div className="flex flex-col gap-8">
@@ -47,9 +52,12 @@ export default function OrderHistory() {
           <p className="text-sm text-gray-600">Review and manage your clinical supply orders.</p>
         </div>
         <div className="flex items-center gap-2 w-full lg:w-auto">
-          <div className="relative flex-grow lg:w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input type="text" placeholder="Search Order ID..." className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <div className="relative flex-grow lg:w-64">
+            <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} aria-label="Sort orders by date" className="w-full appearance-none pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="newest">Latest to oldest</option>
+              <option value="oldest">Oldest to latest</option>
+            </select>
           </div>
         </div>
       </div>
@@ -115,7 +123,7 @@ export default function OrderHistory() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {orders.map(order => (
+                {sortedOrders.map(order => (
                   <tr key={order._id} className="hover:bg-gray-50 transition-colors group">
                     <td className="px-6 py-5 align-top">
                       <p className="font-bold text-blue-900 mb-1">#{order.orderId}</p>

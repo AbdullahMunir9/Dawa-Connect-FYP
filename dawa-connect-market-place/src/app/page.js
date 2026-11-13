@@ -10,6 +10,7 @@ import { formatPKR } from "@/lib/currency";
 import { useCart } from "@/context/CartContext";
 import { recordSearchAndNavigate } from "@/lib/searchNavigation";
 import VoiceMedicineSearchButton from "@/components/VoiceMedicineSearchButton";
+import FavouriteButton from "@/components/FavouriteButton";
 import { Card, SectionHeader, Pill, StatusPill, Skeleton, EmptyState, initials, formatDate, cn } from "@/components/ui";
 
 const QUICK_ACTIONS = [
@@ -30,6 +31,7 @@ function ProductCard({ product, onAdd }) {
         <span className={cn("absolute left-4 top-4 rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ring-inset", available ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-gray-100 text-gray-600 ring-gray-200")}>
           {available ? `In stock · ${product.stock}` : "Out of stock"}
         </span>
+        <FavouriteButton product={product} className="absolute right-4 top-4 z-10 shadow-sm" />
       </Link>
       <div className="flex flex-1 flex-col p-5">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{product.category || "Medicine"}</p>
@@ -97,7 +99,7 @@ export default function Home() {
         }
         if (prescriptionsRes.ok) {
           const rxData = await prescriptionsRes.json();
-          if (rxData.prescriptions?.length) setPrescriptionAlert(rxData.prescriptions.find((p) => p.status === "Pending") || rxData.prescriptions[0]);
+          if (rxData.prescriptions?.length) setPrescriptionAlert(rxData.prescriptions[0]);
         }
       } catch (error) {
         console.error("Failed to fetch user dashboard data", error);
@@ -228,7 +230,7 @@ export default function Home() {
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600"><FileText className="h-5 w-5" /></span>
                 {prescriptionAlert ? (
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2"><p className="truncate text-sm font-semibold text-gray-900">{prescriptionAlert.title || "Prescription"}</p><Pill tone={prescriptionAlert.status === "Approved" ? "green" : prescriptionAlert.status === "Rejected" ? "red" : "amber"}>{prescriptionAlert.status}</Pill></div>
+                    <div className="flex items-center justify-between gap-2"><p className="truncate text-sm font-semibold text-gray-900">{prescriptionAlert.title || "Prescription"}</p><Pill tone="blue">Stored securely</Pill></div>
                     <p className="mt-0.5 text-xs text-gray-500">Uploaded {formatDate(prescriptionAlert.createdAt)} · <Link href="/dashboard/prescriptions" className="font-semibold text-blue-700 hover:underline">Manage</Link></p>
                   </div>
                 ) : <div><p className="text-sm font-semibold text-gray-900">No prescriptions yet</p><p className="text-xs text-gray-500"><Link href="/dashboard/prescriptions" className="font-semibold text-blue-700 hover:underline">Upload one</Link> to reorder faster.</p></div>}

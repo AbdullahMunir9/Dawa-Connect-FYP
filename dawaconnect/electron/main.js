@@ -54,6 +54,7 @@ const applicationIconPath = () => app.isPackaged
   : join(__dirname, '../../resources/icon.png')
 let chatSocket = null
 let chatSessionToken = ''
+let chatAccessToken = ''
 let chatTokenRefreshTimer = null
 let chatConnectPromise = null
 const registrationPhotoSelections = new Map()
@@ -216,6 +217,28 @@ async function choosePharmacyPhoto() {
   return { filePath, buffer, mimeType, previewUrl: `data:${mimeType};base64,${buffer.toString('base64')}` }
 }
 
+async function chooseChatImages(maxImages = 2) {
+  const safeMaximum = Math.min(2, Math.max(1, Number(maxImages) || 2))
+  const options = {
+    title: 'Choose up to 2 chat images',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp'] }]
+  }
+  const focusedWindow = BrowserWindow.getFocusedWindow()
+  const result = focusedWindow ? await dialog.showOpenDialog(focusedWindow, options) : await dialog.showOpenDialog(options)
+  if (result.canceled || !result.filePaths.length) return []
+  if (result.filePaths.length > safeMaximum) throw new Error(`You can select ${safeMaximum} more image${safeMaximum === 1 ? '' : 's'} for this message.`)
+  const images = []
+  for (const filePath of result.filePaths) {
+    const buffer = await readFile(filePath)
+    if (buffer.length > 5 * 1024 * 1024) throw new Error('Each chat image must be 5 MB or smaller.')
+    const mimeType = pharmacyPhotoMime(buffer)
+    if (!mimeType) throw new Error('Only JPEG, PNG, and WebP chat images are supported.')
+    images.push({ buffer, mimeType })
+  }
+  return images
+}
+
 function sessionFilePath() {
   return join(app.getPath('userData'), 'pharmacy-session.bin')
 }
@@ -276,6 +299,7 @@ function disconnectPharmacyChat() {
   chatSocket?.disconnect()
   chatSocket = null
   chatSessionToken = ''
+  chatAccessToken = ''
   chatConnectPromise = null
 }
 
@@ -289,6 +313,7 @@ async function connectPharmacyChat(sessionToken) {
   chatSessionToken = normalizedToken
   const pendingConnection = (async () => {
     const token = await requestPharmacyChatToken(normalizedToken)
+    chatAccessToken = token
     const socket = io(chatServiceUrl, {
       auth: { token },
       // Polling works through more hosting proxies; Socket.IO upgrades to
@@ -318,6 +343,7 @@ async function connectPharmacyChat(sessionToken) {
     chatTokenRefreshTimer = setInterval(async () => {
       try {
         const refreshedToken = await requestPharmacyChatToken(chatSessionToken)
+        chatAccessToken = refreshedToken
         if (chatSocket) chatSocket.auth = { token: refreshedToken }
       } catch (error) {
         broadcastChatEvent('connection', { state: 'offline', error: error.message })
@@ -357,6 +383,40 @@ function emitChatEvent(event, payload = {}) {
       return resolve(response.data)
     })
   })
+}
+
+async function uploadPharmacyChatImage(conversationId, image) {
+  if (!chatAccessToken) throw new Error('Your live chat session expired. Reconnect and try again.')
+  const grantResponse = await fetch(`${chatServiceUrl}/api/chat/conversations/${encodeURIComponent(conversationId)}/image-upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${chatAccessToken}` },
+    signal: AbortSignal.timeout(30_000)
+  })
+  const grantData = await grantResponse.json().catch(() => ({}))
+  if (!grantResponse.ok || !grantData.upload) throw new Error(grantData.message || 'The image upload could not be started.')
+  const grant = grantData.upload
+  const body = new FormData()
+  body.append('file', new Blob([image.buffer], { type: image.mimeType }), 'chat-image')
+  body.append('api_key', grant.apiKey)
+  body.append('timestamp', String(grant.timestamp))
+  body.append('public_id', grant.publicId)
+  body.append('overwrite', 'false')
+  body.append('signature', grant.signature)
+  const uploadResponse = await fetch(grant.uploadUrl, { method: 'POST', body, signal: AbortSignal.timeout(45_000) })
+  const uploaded = await uploadResponse.json().catch(() => ({}))
+  if (!uploadResponse.ok || !uploaded.secure_url || !uploaded.signature) {
+    throw new Error(uploaded?.error?.message || 'The image could not be uploaded.')
+  }
+  return {
+    publicId: uploaded.public_id,
+    version: uploaded.version,
+    uploadSignature: uploaded.signature,
+    format: uploaded.format,
+    bytes: uploaded.bytes,
+    width: uploaded.width,
+    height: uploaded.height,
+    previewUrl: uploaded.secure_url
+  }
 }
 
 function createWindow() {
@@ -825,9 +885,24 @@ app.whenReady().then(async () => {
       const data = await emitChatEvent('message:send', {
         conversationId: payload?.conversationId,
         text: payload?.text,
+        attachments: payload?.attachments,
         clientMessageId: randomUUID()
       })
       return { ok: true, data }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('chat:upload-images', async (_event, payload) => {
+    try {
+      const conversationId = String(payload?.conversationId || '').trim()
+      if (!conversationId) throw new Error('Select a conversation before attaching an image.')
+      const images = await chooseChatImages(payload?.maxImages)
+      if (!images.length) return { ok: true, canceled: true, data: [] }
+      const uploaded = []
+      for (const image of images) uploaded.push(await uploadPharmacyChatImage(conversationId, image))
+      return { ok: true, data: uploaded }
     } catch (error) {
       return { ok: false, error: error.message }
     }

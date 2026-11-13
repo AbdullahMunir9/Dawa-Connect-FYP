@@ -129,7 +129,8 @@ export async function POST(request) {
 
     if (!user.googleSub) user.googleSub = identity.sub;
     if (!user.emailVerifiedAt) user.emailVerifiedAt = new Date();
-    if (!user.picture && identity.picture) user.picture = identity.picture;
+    // Keep the avatar in sync with the image currently supplied by Google.
+    if (identity.picture) user.picture = identity.picture;
     if (!user.status) user.status = "active";
     await user.save();
 

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Send, Bot, Loader2, LockKeyhole, Sparkles, RotateCcw, Copy, Check, ShieldAlert, Pill, AlertTriangle, HelpCircle, Stethoscope, ArrowDown, ImagePlus, X } from "lucide-react";
+import { Send, Bot, Loader2, LockKeyhole, Sparkles, RotateCcw, Copy, Check, ShieldAlert, Pill, AlertTriangle, HelpCircle, Stethoscope, ArrowDown, ImagePlus, FileText, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/context/AuthContext";
 import { cn, initials } from "@/components/ui";
@@ -152,6 +152,9 @@ export default function AssistantPage() {
   const [isPreparingImages, setIsPreparingImages] = useState(false);
   const [pendingImages, setPendingImages] = useState([]);
   const [imageError, setImageError] = useState("");
+  const [prescriptionPickerOpen, setPrescriptionPickerOpen] = useState(false);
+  const [prescriptions, setPrescriptions] = useState([]);
+  const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
   const [quota, setQuota] = useState(null);
   const messagesViewportRef = useRef(null);
   const textareaRef = useRef(null);
@@ -256,6 +259,37 @@ export default function AssistantPage() {
     setPendingImages((current) => current.filter((image) => image.id !== imageId));
     setImageError("");
   }, []);
+
+  const openPrescriptionPicker = useCallback(async () => {
+    if (pendingImages.length >= MAX_IMAGES_PER_MESSAGE || quota?.imagesRemaining === 0) return;
+    setPrescriptionPickerOpen(true);
+    setPrescriptionsLoading(true);
+    setImageError("");
+    try {
+      const response = await fetch("/api/prescriptions", { cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Prescriptions could not be loaded.");
+      setPrescriptions((data.prescriptions || []).filter((prescription) => prescription.available));
+    } catch (error) {
+      setImageError(error.message || "Prescriptions could not be loaded.");
+      setPrescriptionPickerOpen(false);
+    } finally { setPrescriptionsLoading(false); }
+  }, [pendingImages.length, quota?.imagesRemaining]);
+
+  const choosePrescription = useCallback(async (prescription) => {
+    if (pendingImages.length >= MAX_IMAGES_PER_MESSAGE) return setImageError("A message can contain no more than 2 images.");
+    if ((quota?.imagesRemaining ?? 6) <= 0) return setImageError("You have used today's 6 image uploads. You can still ask text questions.");
+    setIsPreparingImages(true); setImageError("");
+    try {
+      const response = await fetch(prescription.previewUrl, { cache: "no-store" });
+      if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.message || "This prescription preview could not be loaded."); }
+      const blob = await response.blob();
+      const prepared = await prepareImage(new File([blob], `${prescription.title}.jpg`, { type: "image/jpeg" }));
+      setPendingImages((current) => [...current, { ...prepared, sourcePrescriptionId: prescription._id }]);
+      setPrescriptionPickerOpen(false);
+    } catch (error) { setImageError(error.message || "This prescription could not be attached."); }
+    finally { setIsPreparingImages(false); }
+  }, [pendingImages.length, quota?.imagesRemaining]);
 
   const sendMessage = useCallback(async (text) => {
     const content = text.trim();
@@ -490,6 +524,7 @@ export default function AssistantPage() {
                   <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading || isPreparingImages || limitReached || pendingImages.length >= MAX_IMAGES_PER_MESSAGE || quota?.imagesRemaining === 0} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-gray-500 transition hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-35" aria-label="Attach up to two images" title="Attach images">
                     {isPreparingImages ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
                   </button>
+                  <button type="button" onClick={() => void openPrescriptionPicker()} disabled={isLoading || isPreparingImages || limitReached || pendingImages.length >= MAX_IMAGES_PER_MESSAGE || quota?.imagesRemaining === 0} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-gray-500 transition hover:bg-violet-50 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-35" aria-label="Select a saved prescription" title="Select saved prescription"><FileText className="h-4 w-4" /></button>
                   <textarea ref={textareaRef} rows={1} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown} disabled={isLoading || limitReached} maxLength={2000}
                     placeholder={limitReached ? "Daily question limit reached" : pendingImages.length ? "Ask a health question about the selected image…" : "Ask about a medicine, a side effect, or how DawaConnect works…"}
                     className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:cursor-not-allowed" aria-label="Message the assistant" />
@@ -498,11 +533,21 @@ export default function AssistantPage() {
                   </button>
                 </div>
               </form>
-              <p className="mt-2 flex items-center justify-between gap-2 px-1 text-[11px] text-gray-400"><span>Up to 2 images per message · 6 per day</span><span className="hidden sm:inline">General information only — not medical advice.</span></p>
+              <p className="mt-2 flex items-center justify-between gap-2 px-1 text-[11px] text-gray-400"><span>Images and saved prescriptions share the 2-per-message · 6-per-day limit</span><span className="hidden sm:inline">General information only — not medical advice.</span></p>
             </div>
           </section>
         </div>
       </div>
+      {prescriptionPickerOpen && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-gray-950/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="prescription-picker-title" onMouseDown={(event) => { if (event.target === event.currentTarget) setPrescriptionPickerOpen(false); }}>
+          <div className="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-gray-200 px-5 py-4"><div><h2 id="prescription-picker-title" className="font-bold text-gray-950">Choose a saved prescription</h2><p className="mt-0.5 text-sm text-gray-500">Preview it here, then attach its first page to your next question.</p></div><button type="button" onClick={() => setPrescriptionPickerOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl text-gray-500 hover:bg-gray-100" aria-label="Close prescription picker"><X className="h-5 w-5" /></button></div>
+            <div className="max-h-[65vh] overflow-y-auto p-5">
+              {prescriptionsLoading ? <div className="grid min-h-40 place-items-center"><Loader2 className="h-7 w-7 animate-spin text-blue-700" /></div> : prescriptions.length === 0 ? <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center"><FileText className="mx-auto h-10 w-10 text-gray-300" /><p className="mt-3 font-semibold text-gray-900">No saved prescriptions</p><p className="mt-1 text-sm text-gray-500">Upload one in your user portal first.</p><Link href="/dashboard/prescriptions" className="mt-4 inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">Manage prescriptions</Link></div> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{prescriptions.map((prescription) => <button key={prescription._id} type="button" onClick={() => void choosePrescription(prescription)} disabled={isPreparingImages} className="overflow-hidden rounded-xl border border-gray-200 bg-white text-left transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md disabled:opacity-50"><div className="h-36 bg-gray-100"><img src={prescription.previewUrl} alt={`Preview of ${prescription.title}`} className="h-full w-full object-cover" /></div><div className="p-3"><p className="truncate text-sm font-semibold text-gray-900">{prescription.title}</p><p className="mt-1 truncate text-xs text-gray-500">{prescription.fileName}</p><span className="mt-3 inline-flex text-xs font-semibold text-blue-700">Select prescription</span></div></button>)}</div>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

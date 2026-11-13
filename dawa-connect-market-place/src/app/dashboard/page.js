@@ -66,7 +66,7 @@ export default function DashboardOverview() {
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <Stat label="Active orders" value={active.length} icon={Truck} tone="bg-blue-50 text-blue-700 group-hover:bg-blue-700" href="/dashboard/orders" hint={`${orders.length} total · ${delivered.length} delivered`} loading={fetching} />
         <Stat label="Delivered spend" value={formatPKR(spent)} icon={PackageCheck} tone="bg-teal-50 text-teal-700 group-hover:bg-teal-700" href="/dashboard/orders" hint="Across delivered orders" loading={fetching} />
-        <Stat label="Prescriptions" value={prescriptions.length} icon={FileText} tone="bg-violet-50 text-violet-700 group-hover:bg-violet-700" href="/dashboard/prescriptions" hint={prescriptions.filter((p) => p.status === "Pending").length ? `${prescriptions.filter((p) => p.status === "Pending").length} pending review` : "All reviewed"} loading={fetching} />
+        <Stat label="Prescriptions" value={prescriptions.length} icon={FileText} tone="bg-violet-50 text-violet-700 group-hover:bg-violet-700" href="/dashboard/prescriptions" hint="Secure personal documents" loading={fetching} />
         <Stat label="Open complaints" value={openComplaints.length} icon={MessageSquareWarning} tone="bg-amber-50 text-amber-700 group-hover:bg-amber-500" href="/dashboard/complaints" hint={`${saved.length} saved item${saved.length === 1 ? "" : "s"}`} loading={fetching} />
       </div>
 
@@ -104,7 +104,7 @@ export default function DashboardOverview() {
               <div className="mt-4 flex items-center gap-3 rounded-xl bg-gray-50 p-3">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white text-violet-600 shadow-sm"><FileText className="h-5 w-5" /></span>
                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900">{latestRx.title}</p><p className="text-xs text-gray-500">Uploaded {formatDate(latestRx.createdAt)}</p></div>
-                <Pill tone={latestRx.status === "Approved" ? "green" : latestRx.status === "Rejected" ? "red" : "amber"}>{latestRx.status}</Pill>
+                <Pill tone="blue">Stored</Pill>
               </div>
             ) : <p className="mt-3 text-sm text-gray-500">No prescriptions uploaded. Keep one on file to speed up prescription-only orders.</p>}
           </Card>

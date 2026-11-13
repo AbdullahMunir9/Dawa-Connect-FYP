@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "node server/index.js",
-    "test:chat": "node --test server/services/chatPolicy.test.js server/middleware/chatAuth.test.js",
+    "test:chat": "node --test server/services/chatPolicy.test.js server/services/chatAttachmentService.test.js server/middleware/chatAuth.test.js",
     "test:analytics": "node --test server/services/analyticsCore.test.js server/services/analyticsNarrativeCore.test.js server/services/analyticsNarrativeProvider.test.js server/services/analyticsNarrativeScenarios.test.js server/services/analyticsReportService.test.js server/services/cityOpportunityCore.test.js server/services/forecastingCore.test.js server/services/inventoryMovement.test.js server/services/monthlyReportAutomationCore.test.js server/services/resendMonthlyReportWebhookCore.test.js"
   },
   "dependencies": {

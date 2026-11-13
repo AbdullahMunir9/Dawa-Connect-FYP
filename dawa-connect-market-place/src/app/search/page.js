@@ -9,6 +9,7 @@ import { useCart } from "@/context/CartContext";
 import { getClientSessionId } from "@/lib/clientSession";
 import VoiceMedicineSearchButton from "@/components/VoiceMedicineSearchButton";
 import SearchDeliveryLocation from "@/components/SearchDeliveryLocation";
+import FavouriteButton from "@/components/FavouriteButton";
 import { readDeliveryLocation, saveDeliveryLocation } from "@/lib/deliveryLocation";
 
 const emptyPagination = { page: 1, totalPages: 1, total: 0, startIndex: 0, endIndex: 0 };
@@ -66,7 +67,7 @@ function OptimalPharmacyCard({ item, destination, onAdd, loading }) {
         </div>
         <div className="flex items-end justify-between gap-4 border-t border-gray-100 pt-4 md:block md:min-w-44 md:border-l md:border-t-0 md:pl-5 md:pt-0 md:text-right">
           <div><p className="text-xs text-gray-500">Estimated checkout total</p><p className="text-2xl font-black text-emerald-700">{formatPKR(estimate.total)}</p><p className="text-[11px] text-gray-400">including delivery and fees</p></div>
-          <button type="button" onClick={() => onAdd(item)} className="mt-3 rounded-xl bg-blue-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-900">Add to cart</button>
+          <div className="mt-3 flex justify-end gap-2"><FavouriteButton product={item} /><button type="button" onClick={() => onAdd(item)} className="rounded-xl bg-blue-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-900">Add to cart</button></div>
         </div>
       </div>
     </section>
@@ -547,13 +548,10 @@ function SearchResultsGridInner() {
                   <div className="text-right mb-4">
                     <p className="text-xl font-bold text-blue-900">{formatPKR(item.price)}</p>
                   </div>
-                  <button
-                    onClick={() => addProductToCart(item)}
-                    disabled={item.stock <= 0}
-                    className={`w-full text-center py-2 px-4 rounded-lg text-sm font-medium transition-colors cursor-pointer ${item.stock > 0 ? "bg-blue-800 text-white hover:bg-blue-900" : "bg-gray-100 text-gray-500 cursor-not-allowed"}`}
-                  >
-                    {item.stock > 0 ? "Add to Cart" : "Notify Me"}
-                  </button>
+                  <div className="flex w-full gap-2">
+                    <FavouriteButton product={item} />
+                    <button onClick={() => addProductToCart(item)} disabled={item.stock <= 0} className={`flex-1 text-center py-2 px-4 rounded-lg text-sm font-medium transition-colors cursor-pointer ${item.stock > 0 ? "bg-blue-800 text-white hover:bg-blue-900" : "bg-gray-100 text-gray-500 cursor-not-allowed"}`}>{item.stock > 0 ? "Add to Cart" : "Notify Me"}</button>
+                  </div>
                 </div>
               </div>
             ))}

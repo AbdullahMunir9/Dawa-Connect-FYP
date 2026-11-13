@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { formatPKR } from "@/lib/currency";
+import FavouriteButton from "@/components/FavouriteButton";
 
 export default function ProductPurchaseCard({ product }) {
   const { addToCart } = useCart();
@@ -51,6 +52,7 @@ export default function ProductPurchaseCard({ product }) {
         <ShoppingCart className="w-5 h-5" />
         {inStock ? "Add to Cart" : "Out of Stock"}
       </button>
+      <FavouriteButton product={product} showLabel className="mt-3 w-full" />
       {added && <Link href="/cart" className="block text-center text-sm text-blue-700 font-medium mt-3">Added — view cart</Link>}
     </div>
   );

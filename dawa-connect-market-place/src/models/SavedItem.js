@@ -12,4 +12,6 @@ const SavedItemSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+SavedItemSchema.index({ userId: 1, productId: 1, pharmacyId: 1 }, { unique: true });
+
 export default mongoose.models.SavedItem || mongoose.model("SavedItem", SavedItemSchema);

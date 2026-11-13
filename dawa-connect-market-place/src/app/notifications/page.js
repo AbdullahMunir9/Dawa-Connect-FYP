@@ -1,4 +1,4 @@
-import { Bell, Package, FileText, CheckCircle, Info } from "lucide-react";
+import { Bell, Package, FileText, Info } from "lucide-react";
 import Link from "next/link";
 
 export default function NotificationsPage() {
@@ -12,16 +12,6 @@ export default function NotificationsPage() {
       icon: <Package className="w-5 h-5 text-blue-600" />,
       read: false,
       link: "/track/DC-89241"
-    },
-    {
-      id: 2,
-      type: "prescription",
-      title: "Prescription Approved",
-      description: "Your recently uploaded prescription 'Monthly Insulin' has been reviewed and approved by a pharmacist.",
-      time: "Yesterday",
-      icon: <CheckCircle className="w-5 h-5 text-teal-600" />,
-      read: true,
-      link: "/dashboard/prescriptions"
     },
     {
       id: 3,

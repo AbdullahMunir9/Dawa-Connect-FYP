@@ -16,6 +16,7 @@ import pharmacyDb from './db/pharmacyConnection.js';
 import { configureChatSocket } from './sockets/chatSocket.js';
 import { startPharmacyNotificationStream } from './services/pharmacyNotificationStream.js';
 import { initializeGuestChatRetention } from './services/chatRetentionService.js';
+import { initializeChatMediaCleanup } from './services/chatAttachmentService.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -23,6 +24,7 @@ const PORT = Number(process.env.PORT) || 5000;
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const PHARMACY_MONGODB_URI = process.env.PHARMACY_MONGODB_URI;
+let stopChatMediaCleanup = () => {};
 
 if (!MONGODB_URI) {
   console.error('MONGODB_URI is not set in environment variables.');
@@ -102,6 +104,11 @@ mongoose.connect(MONGODB_URI)
     } catch (error) {
       console.error('Guest chat retention initialization error:', error.message);
     }
+    try {
+      stopChatMediaCleanup = await initializeChatMediaCleanup();
+    } catch (error) {
+      console.error('Chat media cleanup initialization error:', error.message);
+    }
   })
   .catch((err) => console.error('MarketPlace MongoDB connection error:', err.message));
 
@@ -114,6 +121,7 @@ httpServer.listen(PORT, () => {
 
 async function shutdown(signal) {
   console.log(`${signal} received; shutting down DawaConnect API.`);
+  stopChatMediaCleanup();
   await stopPharmacyNotificationStream();
   io.close();
   httpServer.close(() => process.exit(0));

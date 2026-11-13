@@ -1,40 +1,14 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bookmark, Trash2 } from "lucide-react";
+import { Bookmark, Trash2, Loader2 } from "lucide-react";
 import { formatPKR } from "@/lib/currency";
+import { useFavourites } from "@/context/FavouritesContext";
 
 export default function SavedItems() {
   const { user } = useAuth();
-  const [savedItems, setSavedItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchSavedItems = async () => {
-    try {
-      const res = await fetch("/api/saved");
-      if (res.ok) {
-        const data = await res.json();
-        setSavedItems(data.savedItems);
-      }
-    } catch (error) {
-      console.error("Failed to fetch saved items", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (user) {
-      fetchSavedItems();
-    }
-  }, [user]);
-
-  const removeSavedItem = async (id) => {
-    const response = await fetch(`/api/saved?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-    if (response.ok) setSavedItems((items) => items.filter((item) => item._id !== id));
-  };
+  const { items: savedItems, loading, toggleFavourite, isPending } = useFavourites();
 
   if (!user) return <div className="py-8 text-center text-red-500">Please log in.</div>;
 
@@ -69,8 +43,8 @@ export default function SavedItems() {
                 <Link href={`/product/${item.productId}`} className="flex-1 bg-blue-800 text-white flex items-center justify-center py-2 rounded-lg text-sm font-medium hover:bg-blue-900 transition-colors">
                   View Product
                 </Link>
-                <button onClick={() => removeSavedItem(item._id)} className="p-2 border border-red-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors" aria-label="Remove saved item">
-                  <Trash2 className="w-4 h-4" />
+                <button onClick={() => void toggleFavourite(item).catch(() => {})} disabled={isPending(item)} className="p-2 border border-red-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50" aria-label="Remove saved item">
+                  {isPending(item) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                 </button>
               </div>
             </div>

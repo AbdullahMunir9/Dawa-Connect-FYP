@@ -11,6 +11,7 @@ import {
   normalizeChatText,
   resolveGuestChatExpiresAt,
 } from './chatPolicy.js';
+import { authorizeChatAttachments, commitChatAttachments } from './chatAttachmentService.js';
 
 export class ChatError extends Error {
   constructor(message, status = 400, code = 'CHAT_ERROR') {
@@ -34,6 +35,7 @@ function messageView(message) {
     senderType: doc.senderType,
     clientMessageId: doc.clientMessageId,
     text: doc.text,
+    attachments: Array.isArray(doc.attachments) ? doc.attachments : [],
     createdAt: doc.createdAt,
   };
 }
@@ -254,14 +256,26 @@ export async function listMessages(identity, conversationId, { before, limit = 5
   return { messages: page.map(messageView), hasMore, nextCursor: hasMore ? String(page[0]?._id || '') : null };
 }
 
-export async function sendMessage(identity, conversationId, { text, clientMessageId } = {}) {
+export async function sendMessage(identity, conversationId, { text, clientMessageId, attachments: attachmentInput } = {}) {
   const conversation = await getConversation(identity, conversationId);
   if (conversation.status !== 'active' || !isChatWritableStatus(conversation.orderStatus)) {
     throw new ChatError('This order is complete. The conversation is now read-only.', 409, 'CHAT_READ_ONLY');
   }
-  const normalizedText = normalizeChatText(text);
   const idempotencyKey = String(clientMessageId || '').trim();
   if (!/^[A-Za-z0-9_-]{8,100}$/.test(idempotencyKey)) throw new ChatError('A valid client message ID is required.', 400, 'INVALID_MESSAGE_ID');
+
+  const existing = await ChatMessage.findOne({ conversationId: conversation._id, clientMessageId: idempotencyKey });
+  if (existing) {
+    const currentConversation = await ChatConversation.findById(conversation._id);
+    return { message: messageView(existing), conversation: conversationView(currentConversation), created: false };
+  }
+
+  const hasText = Boolean(String(text || '').trim());
+  const normalizedText = hasText ? normalizeChatText(text) : '';
+  const attachments = await authorizeChatAttachments(identity, conversation, attachmentInput);
+  if (!normalizedText && attachments.length === 0) {
+    throw new ChatError('Write a message or attach an image before sending.', 400, 'EMPTY_MESSAGE');
+  }
 
   let message;
   let created = false;
@@ -272,6 +286,7 @@ export async function sendMessage(identity, conversationId, { text, clientMessag
       senderType: identity.role,
       clientMessageId: idempotencyKey,
       text: normalizedText,
+      attachments,
       expiresAt: conversation.expiresAt || null,
     });
     created = true;
@@ -281,6 +296,7 @@ export async function sendMessage(identity, conversationId, { text, clientMessag
   }
 
   if (created) {
+    await commitChatAttachments(conversation, attachments);
     const recipientIncrement = identity.role === 'pharmacy'
       ? { customerUnreadCount: 1 }
       : { pharmacyUnreadCount: 1 };
@@ -289,7 +305,7 @@ export async function sendMessage(identity, conversationId, { text, clientMessag
       {
         $set: {
           lastMessageAt: message.createdAt,
-          lastMessagePreview: normalizedText.slice(0, 160),
+          lastMessagePreview: (normalizedText || (attachments.length === 1 ? 'Photo' : `${attachments.length} photos`)).slice(0, 160),
         },
         $inc: recipientIncrement,
       },

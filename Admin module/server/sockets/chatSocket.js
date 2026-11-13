@@ -98,9 +98,9 @@ export function configureChatSocket(io) {
     });
 
     socket.on('message:send', (...args) => reply(socketAck(args), async () => {
-      const { conversationId, text, clientMessageId } = socketPayload(args);
+      const { conversationId, text, clientMessageId, attachments } = socketPayload(args);
       enforceMessageRate(socket);
-      const result = await sendMessage(identity, conversationId, { text, clientMessageId });
+      const result = await sendMessage(identity, conversationId, { text, clientMessageId, attachments });
       if (result.created) {
         io.to(conversationRoom(conversationId))
           .to(`pharmacy:${result.conversation.pharmacyId}`)

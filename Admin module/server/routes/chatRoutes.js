@@ -5,11 +5,13 @@ import PharmacyUser from '../models/PharmacyUser.js';
 import { requireChatAuth, signPharmacyChatToken } from '../middleware/chatAuth.js';
 import {
   ChatError,
+  getConversation,
   listConversations,
   listMessages,
   markConversationRead,
   openOrderConversation,
 } from '../services/chatService.js';
+import { createChatUploadGrant } from '../services/chatAttachmentService.js';
 
 function errorResponse(res, error) {
   const status = error instanceof ChatError ? error.status : Number(error?.status) || 500;
@@ -74,6 +76,19 @@ export default function createChatRouter() {
         before: req.query.before,
         limit: req.query.limit,
       }));
+    } catch (error) {
+      return errorResponse(res, error);
+    }
+  });
+
+  router.post('/conversations/:id/image-upload', async (req, res) => {
+    try {
+      const conversation = await getConversation(req.chatIdentity, req.params.id);
+      if (conversation.status !== 'active') {
+        throw new ChatError('Images cannot be added to a read-only conversation.', 409, 'CHAT_READ_ONLY');
+      }
+      const upload = await createChatUploadGrant(req.chatIdentity, conversation);
+      return res.status(201).json({ upload });
     } catch (error) {
       return errorResponse(res, error);
     }

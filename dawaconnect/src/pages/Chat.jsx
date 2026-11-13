@@ -23,6 +23,9 @@ export default function ChatPage({ chatNavigation }) {
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [uploadingImages, setUploadingImages] = useState(false)
+  const [pendingAttachments, setPendingAttachments] = useState([])
+  const [openImage, setOpenImage] = useState(null)
   const [connection, setConnection] = useState('connecting')
   const [error, setError] = useState('')
   const messagesRef = useRef(null)
@@ -126,6 +129,7 @@ export default function ChatPage({ chatNavigation }) {
   useEffect(() => {
     let activeEffect = true
     async function loadMessages() {
+      setPendingAttachments([])
       if (!activeId) {
         setMessages([])
         return
@@ -159,12 +163,17 @@ export default function ChatPage({ chatNavigation }) {
 
   const sendMessage = async () => {
     const text = draft.trim()
-    if (!text || !active?.canSend || sending || connection !== 'connected') return
+    if ((!text && pendingAttachments.length === 0) || !active?.canSend || sending || uploadingImages || connection !== 'connected') return
     setSending(true)
     setError('')
-    const result = await window.electronAPI.chat.sendMessage({ conversationId: active.id, text })
+    const result = await window.electronAPI.chat.sendMessage({
+      conversationId: active.id,
+      text,
+      attachments: pendingAttachments.map(({ previewUrl, ...attachment }) => attachment)
+    })
     if (result.ok) {
       setDraft('')
+      setPendingAttachments([])
       setMessages((current) => mergeMessage(current, result.data.message))
       setConversations((current) => current.map((conversation) => conversation.id === active.id ? { ...conversation, ...result.data.conversation } : conversation))
     } else {
@@ -174,12 +183,29 @@ export default function ChatPage({ chatNavigation }) {
     setSending(false)
   }
 
+  const attachImages = async () => {
+    if (!active?.id || uploadingImages || pendingAttachments.length >= 2) return
+    setUploadingImages(true)
+    setError('')
+    const result = await window.electronAPI.chat.uploadImages({
+      conversationId: active.id,
+      maxImages: 2 - pendingAttachments.length
+    })
+    if (!result.ok) {
+      setError(result.error || 'The images could not be uploaded.')
+      showToast(result.error || 'The images could not be uploaded.', 'error')
+    } else if (!result.canceled) {
+      setPendingAttachments((current) => [...current, ...(result.data || [])])
+    }
+    setUploadingImages(false)
+  }
+
   return (
     <div className="page-shell">
       <div className="page-hero">
         <div>
           <h2>Live Customer Chat</h2>
-          <div className="page-subtitle">Private, human-to-human text conversations for active marketplace orders.</div>
+          <div className="page-subtitle">Private, human-to-human text and image conversations for active marketplace orders.</div>
         </div>
         <div className="action-row">
           <span className={`badge ${connection === 'connected' ? 'badge-success' : 'badge-warning'}`}>{connection === 'connected' ? '● Connected' : connection}</span>
@@ -226,17 +252,29 @@ export default function ChatPage({ chatNavigation }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {messages.map((message) => {
                     const mine = message.senderType === 'pharmacy'
-                    return <div key={message.id} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start' }}><div className={`chat-msg ${mine ? 'pharmacy' : 'customer'}`} style={{ maxWidth: '72%' }}><div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.text}</div><div style={{ marginTop: 5, opacity: 0.6, fontSize: 10, textAlign: 'right' }}>{mine ? 'You' : 'Customer'} · {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div></div></div>
+                    return <div key={message.id} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start' }}><div className={`chat-msg ${mine ? 'pharmacy' : 'customer'}`} style={{ maxWidth: '72%' }}>
+                      {message.attachments?.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: message.attachments.length > 1 ? 'repeat(2,minmax(0,1fr))' : 'minmax(0,1fr)', gap: 7, marginBottom: message.text ? 8 : 0 }}>
+                        {message.attachments.map((attachment) => <button key={attachment.publicId} type="button" onClick={() => setOpenImage(attachment)} style={{ border: 0, padding: 0, borderRadius: 10, overflow: 'hidden', background: 'rgba(0,0,0,.08)', cursor: 'zoom-in' }}><img src={attachment.thumbnailUrl || attachment.url} alt="Chat attachment" style={{ display: 'block', width: '100%', maxHeight: 240, objectFit: 'cover' }} /></button>)}
+                      </div>}
+                      {message.text && <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.text}</div>}
+                      <div style={{ marginTop: 5, opacity: 0.6, fontSize: 10, textAlign: 'right' }}>{mine ? 'You' : 'Customer'} · {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div></div></div>
                   })}
                 </div>
               </div>
               {active.canSend ? (
                 <div style={{ borderTop: '1px solid #e2e8f0', padding: 15 }}>
+                  {pendingAttachments.length > 0 && <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+                    {pendingAttachments.map((attachment, index) => <div key={attachment.publicId} style={{ position: 'relative', width: 96, height: 78, borderRadius: 11, overflow: 'hidden', border: '1px solid #cbd5e1' }}>
+                      <img src={attachment.previewUrl} alt={`Selected attachment ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <button type="button" onClick={() => setPendingAttachments((current) => current.filter((item) => item.publicId !== attachment.publicId))} aria-label="Remove image" style={{ position: 'absolute', right: 4, top: 4, border: 0, borderRadius: '50%', width: 23, height: 23, background: 'rgba(15,23,42,.82)', color: '#fff', cursor: 'pointer' }}>×</button>
+                    </div>)}
+                  </div>}
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+                    <button className="btn btn-secondary" type="button" onClick={attachImages} disabled={uploadingImages || sending || pendingAttachments.length >= 2}>{uploadingImages ? 'Uploading…' : 'Attach images'}</button>
                     <textarea className="form-control" rows={2} maxLength={2000} placeholder="Reply to the customer…" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }} style={{ resize: 'none' }} />
-                    <button className="btn btn-primary" onClick={sendMessage} disabled={sending || !draft.trim() || connection !== 'connected'}>{sending ? 'Sending…' : 'Send'}</button>
+                    <button className="btn btn-primary" onClick={sendMessage} disabled={sending || uploadingImages || (!draft.trim() && pendingAttachments.length === 0) || connection !== 'connected'}>{sending ? 'Sending…' : 'Send'}</button>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, color: '#94a3b8', fontSize: 10 }}><span>Human reply · Text only · Visible only to this customer</span><span>{draft.length}/2000</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, color: '#94a3b8', fontSize: 10 }}><span>Private chat · Up to 2 images per message · 5 MB each</span><span>{draft.length}/2000</span></div>
                 </div>
               ) : <div style={{ padding: 18, borderTop: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontSize: 13, textAlign: 'center' }}>This order is {active.orderStatus.toLowerCase()}. Its chat history is read-only.</div>}
             </>
@@ -244,6 +282,10 @@ export default function ChatPage({ chatNavigation }) {
           {error && <div style={{ padding: '10px 16px', borderTop: '1px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontSize: 12 }}>{error}</div>}
         </section>
       </div>
+      {openImage && <div role="dialog" aria-modal="true" aria-label="Chat image preview" onClick={() => setOpenImage(null)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(2,6,23,.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 28 }}>
+        <button type="button" onClick={() => setOpenImage(null)} aria-label="Close image" style={{ position: 'absolute', right: 24, top: 20, border: 0, borderRadius: '50%', width: 42, height: 42, background: 'rgba(255,255,255,.16)', color: '#fff', fontSize: 26, cursor: 'pointer' }}>×</button>
+        <img src={openImage.url} alt="Chat attachment full size" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '94vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 16, boxShadow: '0 24px 80px rgba(0,0,0,.45)' }} />
+      </div>}
     </div>
   )
 }

@@ -11,6 +11,7 @@ export const metadata = {
 import ConditionalChrome from '@/components/ConditionalChrome'
 import { AuthProvider } from '@/context/AuthContext'
 import { CartProvider } from '@/context/CartContext'
+import { FavouritesProvider } from '@/context/FavouritesContext'
 
 export default function RootLayout({ children }) {
   return (
@@ -18,7 +19,9 @@ export default function RootLayout({ children }) {
       <body className={`${inter.className} min-h-screen flex flex-col bg-gray-50 text-gray-900`}>
         <AuthProvider>
           <CartProvider>
-            <ConditionalChrome>{children}</ConditionalChrome>
+            <FavouritesProvider>
+              <ConditionalChrome>{children}</ConditionalChrome>
+            </FavouritesProvider>
           </CartProvider>
         </AuthProvider>
       </body>

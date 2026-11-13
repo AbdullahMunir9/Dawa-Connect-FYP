@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutGrid, ListOrdered, FileText, Settings, MapPinHouse, Loader2, MessageSquareWarning, Bookmark, LogOut, Bot, ChevronRight, MapPin } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { cn, initials } from "@/components/ui";
+import { cn } from "@/components/ui";
+import UserAvatar from "@/components/UserAvatar";
 
 const NAV = [
   { name: "Overview", href: "/dashboard", icon: LayoutGrid, hint: "Your activity at a glance" },
@@ -45,7 +46,7 @@ export default function DashboardLayout({ children }) {
             <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
               <div className="bg-gradient-to-br from-blue-800 to-blue-950 p-5 text-white">
                 <div className="flex items-center gap-3">
-                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white/15 text-base font-bold ring-2 ring-white/20">{initials(user.name)}</span>
+                  <UserAvatar user={user} className="h-12 w-12 text-base ring-2 ring-white/20" fallbackClassName="bg-white/15 text-white" />
                   <div className="min-w-0">
                     <p className="truncate font-semibold leading-tight">{user.name}</p>
                     <p className="truncate text-xs text-blue-200">{user.email}</p>
