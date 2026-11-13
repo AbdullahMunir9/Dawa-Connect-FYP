@@ -17,6 +17,7 @@ export default function Navbar() {
   const [authReturnPath, setAuthReturnPath] = useState(pathname || "/");
   const { user, loading, logout } = useAuth();
   const { totalItems } = useCart();
+  const portalHref = user ? "/dashboard" : authPageHref("/signup", "/dashboard");
 
   useEffect(() => {
     setAuthReturnPath(`${window.location.pathname}${window.location.search}${window.location.hash}`);
@@ -56,7 +57,7 @@ export default function Navbar() {
             <Link href="/assistant" className={`text-sm font-medium px-1 py-5 whitespace-nowrap ${pathname.startsWith('/assistant') ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
               AI Assistant
             </Link>
-            <Link href="/dashboard" className={`text-sm font-medium px-1 py-5 whitespace-nowrap ${pathname.startsWith('/dashboard') ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
+            <Link href={portalHref} prefetch={false} className={`text-sm font-medium px-1 py-5 whitespace-nowrap ${pathname.startsWith('/dashboard') ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
               User Portal
             </Link>
           </div>
@@ -111,7 +112,7 @@ export default function Navbar() {
               <>
                 {user ? (
                   <div className="flex items-center gap-2">
-                    <Link href="/dashboard" className="hidden sm:flex text-gray-500 hover:text-gray-900 items-center gap-2">
+                    <Link href="/dashboard" prefetch={false} className="hidden sm:flex text-gray-500 hover:text-gray-900 items-center gap-2">
                       <User className="h-5 w-5" />
                       <span className="hidden md:inline text-sm font-medium">{user.name}</span>
                     </Link>

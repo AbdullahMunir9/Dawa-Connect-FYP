@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:auth": "node --test src/lib/googleIdentity.test.mjs src/lib/authRedirect.test.mjs src/lib/emailVerification.test.mjs",
+    "test:auth": "node --test src/lib/googleIdentity.test.mjs src/lib/googleAccountPolicy.test.mjs src/lib/authRedirect.test.mjs src/lib/emailVerification.test.mjs",
     "test:ai": "node --test src/lib/aiScope.test.mjs src/lib/aiImages.test.mjs",
     "test:commerce": "node --test src/lib/cartGroups.test.mjs src/lib/deliveryRanking.test.mjs src/lib/guestOrderAccess.test.mjs",
     "test:auth-ui": "playwright test --config playwright.auth-ui.config.mjs",

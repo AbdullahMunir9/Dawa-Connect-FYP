@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import connectToDatabase from "@/lib/mongodb";
-import { marketplaceUserView } from "@/lib/authSession";
+import { clearMarketplaceSession, marketplaceUserView } from "@/lib/authSession";
 import User from "@/models/User";
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -21,7 +21,9 @@ export async function GET(req) {
       "name email status phone city picture emailVerifiedAt addresses"
     );
     if (!userDoc) {
-      return NextResponse.json({ message: "Not authenticated" }, { status: 401 });
+      return clearMarketplaceSession(
+        NextResponse.json({ message: "Not authenticated" }, { status: 401 })
+      );
     }
 
     if (!userDoc.status) {
@@ -35,16 +37,7 @@ export async function GET(req) {
         { message: "Your account is suspended. Please contact support." },
         { status: 403 }
       );
-      response.cookies.set({
-        name: "auth_token",
-        value: "",
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 0,
-        path: "/",
-      });
-      return response;
+      return clearMarketplaceSession(response);
     }
 
     return NextResponse.json(
@@ -54,6 +47,8 @@ export async function GET(req) {
 
   } catch (error) {
     console.error("Auth check error:", error);
-    return NextResponse.json({ message: "Not authenticated" }, { status: 401 });
+    return clearMarketplaceSession(
+      NextResponse.json({ message: "Not authenticated" }, { status: 401 })
+    );
   }
 }

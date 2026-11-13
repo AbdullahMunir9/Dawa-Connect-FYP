@@ -67,8 +67,16 @@ export function AuthProvider({ children }) {
 
     setUser(sessionData.user);
     setLoading(false);
-    router.replace(safeAuthRedirect(redirectTo));
-    router.refresh();
+    const destination = safeAuthRedirect(redirectTo);
+    // A protected dashboard route may have been prefetched while the visitor
+    // was logged out. A document navigation clears that stale redirect cache
+    // and guarantees the new HttpOnly cookie is used for the first portal load.
+    if (typeof window !== "undefined") {
+      window.location.replace(destination);
+    } else {
+      router.replace(destination);
+      router.refresh();
+    }
     return { success: true };
   };
 

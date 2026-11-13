@@ -50,3 +50,16 @@ export function setMarketplaceSession(response, token) {
   });
   return response;
 }
+
+export function clearMarketplaceSession(response) {
+  response.cookies.set({
+    name: "auth_token",
+    value: "",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 0,
+    path: "/",
+  });
+  return response;
+}

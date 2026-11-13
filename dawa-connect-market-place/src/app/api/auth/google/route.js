@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { OAuth2Client } from "google-auth-library";
 import connectToDatabase from "@/lib/mongodb";
 import { createMarketplaceToken, marketplaceUserView, setMarketplaceSession } from "@/lib/authSession";
+import { decideGoogleAccountAction } from "@/lib/googleAccountPolicy.mjs";
 import { googleIdentityFromPayload } from "@/lib/googleIdentity.mjs";
 import User from "@/models/User";
 
@@ -91,34 +92,35 @@ export async function POST(request) {
     }
 
     await connectToDatabase();
-    let user = await User.findOne({ googleSub: identity.sub }).select("+googleSub");
+    const googleUser = await User.findOne({ googleSub: identity.sub }).select("+googleSub");
+    const emailUser = googleUser
+      ? null
+      : await User.findOne({ email: identity.email }).select("+googleSub");
+    const decision = decideGoogleAccountAction({
+      hasGoogleMatch: Boolean(googleUser),
+      hasEmailMatch: Boolean(emailUser),
+      linkedGoogleSub: emailUser?.googleSub || "",
+      identitySub: identity.sub,
+      authoritativeEmail: identity.authoritativeEmail,
+    });
 
-    if (!user) {
-      user = await User.findOne({ email: identity.email }).select("+googleSub");
-      if (user) {
-        if (user.googleSub && user.googleSub !== identity.sub) {
-          return failure("This email is already connected to another Google account.", 409);
-        }
-        if (!identity.authoritativeEmail) {
-          return failure("Sign in with your password for this email. Google linking is not available for this address.", 409);
-        }
-      } else if (intent === "login") {
-        return failure("No Marketplace account uses this Google account. Choose Register first.", 404);
-      } else {
-        if (!identity.authoritativeEmail) {
-          return failure("Use a Gmail or Google Workspace address, or register with email and verify it using the OTP sent to your inbox.", 400);
-        }
-        user = new User({
-          name: identity.name,
-          email: identity.email,
-          googleSub: identity.sub,
-          emailVerifiedAt: new Date(),
-          picture: identity.picture,
-          status: "active",
-          phone: "",
-          city: "",
-        });
-      }
+    if (decision.action === "reject") {
+      return failure(decision.message, decision.status);
+    }
+
+    let user = googleUser || emailUser;
+    const accountCreated = decision.action === "create_and_sign_in";
+    if (accountCreated) {
+      user = new User({
+        name: identity.name,
+        email: identity.email,
+        googleSub: identity.sub,
+        emailVerifiedAt: new Date(),
+        picture: identity.picture,
+        status: "active",
+        phone: "",
+        city: "",
+      });
     }
 
     if (String(user.status || "active").toLowerCase() === "suspended") {
@@ -133,7 +135,8 @@ export async function POST(request) {
 
     const token = await createMarketplaceToken(user);
     const response = NextResponse.json({
-      message: intent === "signup" ? "Google account connected successfully." : "Login successful.",
+      message: accountCreated ? "Google account created and signed in." : "Google sign-in successful.",
+      accountCreated,
       user: marketplaceUserView(user),
     }, { headers: { "Cache-Control": "no-store" } });
     clearNonce(response);
