@@ -5,12 +5,15 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Truck, CheckCircle2, FileText, XCircle, ArrowUpDown, MessageCircle, MessageSquareWarning } from "lucide-react";
 import { formatPKR } from "@/lib/currency";
+import OrderReviewDialog from "@/components/reviews/OrderReviewDialog";
+import useOrderReviews from "@/hooks/useOrderReviews";
 
 export default function OrderHistory() {
   const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sortOrder, setSortOrder] = useState("newest");
+  const { reviewsByOrder, loading: reviewsLoading, saveReview } = useOrderReviews({ enabled: Boolean(user) });
 
   const fetchOrders = async () => {
     try {
@@ -161,6 +164,13 @@ export default function OrderHistory() {
                       <Link href={`/chat/order/${encodeURIComponent(order.orderId)}`} className="inline-flex w-full justify-center items-center gap-2 border border-blue-200 bg-blue-50 text-blue-800 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">
                         <MessageCircle className="w-4 h-4" /> Chat with pharmacy
                       </Link>
+                      <OrderReviewDialog
+                        order={order}
+                        review={reviewsByOrder[order.orderId] || null}
+                        reviewLoading={reviewsLoading}
+                        onReviewSaved={saveReview}
+                        className="rounded-lg py-2"
+                      />
                       <Link href={`/dashboard/complaints?new=1&orderId=${encodeURIComponent(order.orderId)}${order.fulfillments?.length === 1 ? `&pharmacyId=${encodeURIComponent(order.fulfillments[0].pharmacyId)}` : ""}`} className="inline-flex w-full justify-center items-center gap-2 border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
                         <MessageSquareWarning className="w-4 h-4" /> Report a problem
                       </Link>

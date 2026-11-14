@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Camera, Clock, MapPin, ShieldCheck, Star } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Camera, Clock, MessageSquareQuote, MapPin, ShieldCheck, Star } from "lucide-react";
 import { getApprovedPharmacyById } from "@/lib/pharmacyCatalog";
 import PharmacyProductsGrid from "@/components/PharmacyProductsGrid";
 
@@ -43,6 +43,7 @@ export default async function PharmacyProductsPage({ params }) {
             <div className="inline-flex self-start items-center gap-1 bg-teal-50 text-teal-700 px-3 py-1.5 rounded-lg font-semibold">
               {pharmacy.rating ?? "New"}
               {pharmacy.rating != null && <Star className="w-4 h-4 fill-current" />}
+              {pharmacy.reviewCount > 0 && <span className="ml-1 font-medium text-teal-600">({pharmacy.reviewCount})</span>}
             </div>
           </div>
         </div>
@@ -65,6 +66,35 @@ export default async function PharmacyProductsPage({ params }) {
                     <span className="mt-1 block text-sm font-medium">{photo.caption}</span>
                   </figcaption>
                 </figure>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {pharmacy.reviews.length > 0 && (
+          <section className="mb-8" aria-labelledby="pharmacy-reviews-heading">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-700"><MessageSquareQuote className="h-4 w-4" /> Customer reviews</p>
+                <h2 id="pharmacy-reviews-heading" className="mt-1 text-xl font-semibold text-gray-950">Feedback from verified orders</h2>
+              </div>
+              <p className="text-sm text-gray-600">{pharmacy.rating} out of 5 from {pharmacy.reviewCount} review{pharmacy.reviewCount === 1 ? "" : "s"}</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              {pharmacy.reviews.map((review) => (
+                <article key={review.id} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-gray-950">{review.customer}</p>
+                      {review.verifiedPurchase && <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><BadgeCheck className="h-3.5 w-3.5" /> Verified purchase</p>}
+                    </div>
+                    <div className="flex items-center gap-0.5" aria-label={`${review.rating} out of 5 stars`}>
+                      {[1, 2, 3, 4, 5].map((star) => <Star key={star} className={`h-4 w-4 ${star <= review.rating ? "fill-amber-400 text-amber-400" : "text-gray-300"}`} />)}
+                    </div>
+                  </div>
+                  {review.comment ? <p className="mt-4 text-sm leading-6 text-gray-600">{review.comment}</p> : <p className="mt-4 text-sm italic text-gray-400">The customer left a rating without a written comment.</p>}
+                  {review.date && <time className="mt-4 block text-xs text-gray-400">{new Date(review.date).toLocaleDateString("en-PK", { year: "numeric", month: "short", day: "numeric" })}</time>}
+                </article>
               ))}
             </div>
           </section>

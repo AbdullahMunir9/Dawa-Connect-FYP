@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Clock3, MessageCircle, Package, Store, Truck } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { formatPKR } from "@/lib/currency";
+import OrderReviewDialog from "@/components/reviews/OrderReviewDialog";
+import useOrderReviews from "@/hooks/useOrderReviews";
 
 function orderDate(value) {
   if (!value) return "";
@@ -22,6 +24,7 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { reviewsByOrder, loading: reviewsLoading, saveReview } = useOrderReviews({ enabled: !authLoading });
 
   useEffect(() => {
     let active = true;
@@ -54,7 +57,7 @@ export default function OrdersPage() {
             <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">
               {user
                 ? "This includes orders from your account and any guest orders placed earlier in this browser."
-                : "Guest orders stay available in this browser for 30 days, unless browser cookies are cleared or private browsing is used."}
+                : "Guest orders stay available in this browser for 15 days, unless browser cookies are cleared or private browsing is used."}
             </p>
           </div>
           <Link href="/search" className="inline-flex items-center justify-center rounded-xl bg-blue-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-900">
@@ -92,13 +95,19 @@ export default function OrdersPage() {
                     <p className="mt-1 text-lg font-bold text-gray-950">{formatPKR(order.total)}</p>
                   </div>
                 </div>
-                <div className="grid gap-2 border-t border-gray-100 bg-gray-50/70 p-4 sm:grid-cols-2">
+                <div className={`grid gap-2 border-t border-gray-100 bg-gray-50/70 p-4 ${order.status === "Delivered" ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
                   <Link href={`/track/${encodeURIComponent(order.orderId)}`} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-900">
                     <Truck className="h-4 w-4" /> Track order
                   </Link>
                   <Link href={`/chat/order/${encodeURIComponent(order.orderId)}`} className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-800 hover:bg-blue-50">
                     <MessageCircle className="h-4 w-4" /> Open pharmacy chat
                   </Link>
+                  <OrderReviewDialog
+                    order={order}
+                    review={reviewsByOrder[order.orderId] || null}
+                    reviewLoading={reviewsLoading}
+                    onReviewSaved={saveReview}
+                  />
                 </div>
               </article>
             ))}

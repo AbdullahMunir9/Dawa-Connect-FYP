@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, ImagePlus, Trash2 } from 'lucide-react';
+import { BadgeCheck, Camera, ImagePlus, MessageSquare, RefreshCw, Star, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 const readOnlyFieldStyle = { background: '#f8fafc', color: '#64748b', cursor: 'not-allowed' };
@@ -199,31 +199,76 @@ export function ProfilePage() {
 }
 
 export function ReviewsPage() {
-  const { reviews } = useApp();
-  const avg = reviews.length ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1) : '0.0';
+  const { reviews, refreshReviews } = useApp();
+  const [refreshing, setRefreshing] = useState(false);
+  const validReviews = reviews.filter((review) => Number.isFinite(Number(review.rating)) && Number(review.rating) >= 1 && Number(review.rating) <= 5);
+  const avg = validReviews.length
+    ? (validReviews.reduce((sum, review) => sum + Number(review.rating), 0) / validReviews.length).toFixed(1)
+    : '0.0';
+
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      if (!refreshReviews) return;
+      await refreshReviews();
+      if (!active) return;
+    };
+    void refresh();
+    const interval = setInterval(refresh, 30000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [refreshReviews]);
+
+  const handleRefresh = async () => {
+    if (!refreshReviews || refreshing) return;
+    setRefreshing(true);
+    try {
+      await refreshReviews();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const StarRating = ({ rating }) => (
-    <span>{Array.from({ length: 5 }, (_, i) => <span key={i} style={{ color: i < rating ? '#f59e0b' : '#e2e8f0', fontSize: 16 }}>★</span>)}</span>
+    <span style={{ display: 'inline-flex', gap: 2, marginLeft: 10 }} aria-label={`${rating} out of 5 stars`}>
+      {Array.from({ length: 5 }, (_, index) => (
+        <Star key={index} size={15} fill={index < Number(rating) ? '#f59e0b' : 'transparent'} color={index < Number(rating) ? '#f59e0b' : '#cbd5e1'} />
+      ))}
+    </span>
   );
 
   return (
     <div>
-      {/* Summary */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 18, flexWrap: 'wrap' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 20, color: '#0f172a' }}>Customer feedback</h2>
+          <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: 13 }}>Ratings from verified DawaConnect marketplace orders.</p>
+        </div>
+        <button type="button" onClick={handleRefresh} disabled={refreshing} className="btn btn-outline" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 108, justifyContent: 'center' }}>
+          <RefreshCw size={15} /> {refreshing ? 'Refreshing' : 'Refresh'}
+        </button>
+      </div>
+
       <div className="card" style={{ marginBottom: 20, padding: '24px 28px' }}>
-        <div style={{ display: 'flex', gap: 40, alignItems: 'center' }}>
-          <div style={{ textAlign: 'center' }}>
+        <div className="reviews-summary-grid">
+          <div style={{ textAlign: 'center', padding: '8px 0' }}>
             <div style={{ fontSize: 56, fontWeight: 800, color: '#0f766e', fontFamily: 'Sora,sans-serif', lineHeight: 1 }}>{avg}</div>
-            <div style={{ color: '#f59e0b', fontSize: 22 }}>{'★'.repeat(Math.round(avg))}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{reviews.length} reviews</div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 3, marginTop: 9 }}>
+              {Array.from({ length: 5 }, (_, index) => <Star key={index} size={20} fill={index < Math.round(Number(avg)) ? '#f59e0b' : 'transparent'} color={index < Math.round(Number(avg)) ? '#f59e0b' : '#cbd5e1'} />)}
+            </div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 7 }}>{validReviews.length} verified review{validReviews.length === 1 ? '' : 's'}</div>
           </div>
           <div style={{ flex: 1 }}>
             {[5, 4, 3, 2, 1].map(star => {
-              const count = reviews.filter(r => r.rating === star).length;
+              const count = validReviews.filter(review => Number(review.rating) === star).length;
+              const percentage = validReviews.length ? (count / validReviews.length) * 100 : 0;
               return (
                 <div key={star} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, color: '#64748b', width: 16 }}>{star}★</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 13, color: '#64748b', width: 30 }}>{star}<Star size={12} fill="#f59e0b" color="#f59e0b" /></span>
                   <div className="progress-bar" style={{ flex: 1 }}>
-                    <div className="progress-fill" style={{ width: `${(count / reviews.length) * 100}%`, background: '#f59e0b' }} />
+                    <div className="progress-fill" style={{ width: `${percentage}%`, background: '#f59e0b' }} />
                   </div>
                   <span style={{ fontSize: 12, color: '#94a3b8', width: 20 }}>{count}</span>
                 </div>
@@ -233,23 +278,30 @@ export function ReviewsPage() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {reviews.map(r => (
-          <div key={r.id} className="card" style={{ padding: '18px 22px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div>
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{r.customer}</span>
-                <StarRating rating={r.rating} />
+      {validReviews.length === 0 ? (
+        <div className="card" style={{ padding: '54px 24px', textAlign: 'center' }}>
+          <div style={{ width: 62, height: 62, borderRadius: 20, background: '#ecfdf5', color: '#0f766e', display: 'grid', placeItems: 'center', margin: '0 auto' }}><MessageSquare size={28} /></div>
+          <h3 style={{ margin: '18px 0 6px', fontSize: 17, color: '#0f172a' }}>No customer reviews yet</h3>
+          <p style={{ margin: '0 auto', maxWidth: 440, color: '#64748b', fontSize: 13.5, lineHeight: 1.6 }}>Verified customers can leave a rating after their order is delivered. Their feedback will appear here automatically.</p>
+        </div>
+      ) : <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {validReviews.map(review => (
+          <div key={review.id} className="card" style={{ padding: '18px 22px' }}>
+            <div className="review-card-header">
+              <div className="review-card-identity">
+                <span style={{ fontWeight: 700, fontSize: 14 }}>{review.customer || 'Verified customer'}</span>
+                <StarRating rating={review.rating} />
+                {review.verifiedPurchase && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 10, color: '#0f766e', fontSize: 11.5, fontWeight: 600 }}><BadgeCheck size={14} /> Verified purchase</span>}
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span className={`badge badge-${r.status === 'Published' ? 'success' : 'warning'}`}>{r.status}</span>
-                <span style={{ fontSize: 12, color: '#94a3b8' }}>{r.date}</span>
+                <span className={`badge badge-${review.status === 'Published' ? 'success' : 'warning'}`}>{review.status || 'Published'}</span>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>{review.date}</span>
               </div>
             </div>
-            <p style={{ fontSize: 13.5, color: '#475569', lineHeight: 1.6 }}>{r.comment}</p>
+            {review.comment ? <p style={{ fontSize: 13.5, color: '#475569', lineHeight: 1.6, margin: 0 }}>{review.comment}</p> : <p style={{ fontSize: 13, color: '#94a3b8', fontStyle: 'italic', margin: 0 }}>The customer left a rating without a written comment.</p>}
           </div>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }

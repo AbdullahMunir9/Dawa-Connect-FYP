@@ -207,14 +207,42 @@ export async function getApprovedPharmacyById(id) {
 
   const views = await pharmacyViewsByOwners(pharmacyDb, [user]);
   const pharmacy = views.get(idString(user._id));
-  const products = await pharmacyDb.collection("products")
-    .find(sellableProductFilter({ ownerId: pharmacy.id }))
-    .sort({ stock: -1, name: 1 })
-    .toArray();
+  const [products, reviews] = await Promise.all([
+    pharmacyDb.collection("products")
+      .find(sellableProductFilter({ ownerId: pharmacy.id }))
+      .sort({ stock: -1, name: 1 })
+      .toArray(),
+    pharmacyDb.collection("reviews")
+      .find({
+        ownerId: pharmacy.id,
+        source: "marketplace",
+        status: { $not: { $regex: /^rejected$/i } },
+      }, {
+        projection: {
+          customer: 1,
+          rating: 1,
+          comment: 1,
+          verifiedPurchase: 1,
+          date: 1,
+          createdAt: 1,
+        },
+      })
+      .sort({ createdAt: -1, date: -1 })
+      .limit(20)
+      .toArray(),
+  ]);
 
   return {
     ...pharmacy,
     products: products.map((product) => buildProductView(product, pharmacy)),
+    reviews: reviews.map((review) => ({
+      id: idString(review._id),
+      customer: review.customer || "Verified customer",
+      rating: Number(review.rating),
+      comment: review.comment || "",
+      verifiedPurchase: review.verifiedPurchase === true,
+      date: review.date || review.createdAt || null,
+    })),
   };
 }
 

@@ -27,6 +27,7 @@ export default async function PharmaciesPage() {
                   <span className="inline-flex items-center gap-1 bg-teal-50 px-2.5 py-1 rounded text-teal-700 text-sm font-medium">
                     {pharmacy.rating ?? "New"}
                     {pharmacy.rating != null && <Star className="w-3.5 h-3.5 fill-current" />}
+                    {pharmacy.reviewCount > 0 && <span className="text-xs text-teal-600">({pharmacy.reviewCount})</span>}
                   </span>
                 </div>
 

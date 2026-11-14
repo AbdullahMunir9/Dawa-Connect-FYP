@@ -357,3 +357,33 @@ tbody tr:last-child td { border-bottom: none; }
   .registration-actions .btn { width: 100%; justify-content: center; }
   .registration-card-otp { padding: 30px 20px; }
 }
+/* Review analytics stays readable when the desktop window is resized. */
+.reviews-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.35fr) minmax(260px, 1fr);
+  gap: 40px;
+  align-items: center;
+}
+
+.review-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.review-card-identity {
+  display: flex;
+  align-items: center;
+  row-gap: 6px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .reviews-summary-grid {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+}

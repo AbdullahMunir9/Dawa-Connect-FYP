@@ -87,6 +87,13 @@ export const AppProvider = ({ children }) => {
     }
   }
 
+  const refreshReviews = useCallback(async () => {
+    if (!user?.id || !window.electronAPI?.entity) return { ok: false, error: 'Pharmacy session is unavailable.' }
+    const result = await window.electronAPI.entity.list({ entity: 'reviews', ownerId: String(user.id), sort: { createdAt: -1 } })
+    if (result.ok) setReviews(result.data.map(mapDoc))
+    return result
+  }, [user?.id])
+
   const loadAllData = useCallback(async (ownerId) => {
     if (!ownerId || !window.electronAPI) return
     const ownerKey = String(ownerId)
@@ -551,7 +558,7 @@ export const AppProvider = ({ children }) => {
       inventory, addInventoryItem, updateInventoryItem, deleteInventoryItem,
       orders, updateOrderStatus,
       staff, addStaff, removeStaff,
-      reviews, returns, updateReturn,
+      reviews, refreshReviews, returns, updateReturn,
       notifications, markAllNotificationsRead, addNotification,
       complaints, fileComplaint, replyToComplaint, setComplaintStatus, openComplaintCount,
       toasts, showToast,

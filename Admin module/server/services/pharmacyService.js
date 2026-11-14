@@ -75,6 +75,8 @@ export async function pharmacyDatabase() {
       pharmacyDb.collection('monthlyReportWebhookEvents').createIndex({ deleteAt: 1 }, { expireAfterSeconds: 0 }),
       pharmacyDb.collection('staff').createIndex({ ownerId: 1, email: 1 }),
       pharmacyDb.collection('reviews').createIndex({ ownerId: 1, date: -1 }),
+      pharmacyDb.collection('reviews').createIndex({ reviewKey: 1 }, { unique: true, sparse: true }),
+      pharmacyDb.collection('reviews').createIndex({ orderId: 1, source: 1 }),
       pharmacyDb.collection('returns').createIndex({ ownerId: 1, date: -1 }),
       pharmacyDb.collection('notifications').createIndex({ ownerId: 1, createdAt: -1 }),
       pharmacyDb.collection('profiles').createIndex({ ownerId: 1 }, { unique: true }),
