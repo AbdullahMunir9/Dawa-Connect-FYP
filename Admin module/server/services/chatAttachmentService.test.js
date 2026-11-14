@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 import {
   CHAT_IMAGE_MAX_BYTES,
+  chatUploadIdentity,
   normalizeChatAttachmentPayload,
 } from './chatAttachmentService.js';
 
@@ -65,4 +66,12 @@ test('rejects an image larger than five megabytes', () => {
   assert.throws(() => normalizeChatAttachmentPayload([attachment], {
     conversationId, cloudName, apiSecret,
   }), /5 MB or smaller/);
+});
+
+test('uses the signed order scope as the stable guest upload identity', () => {
+  assert.equal(
+    chatUploadIdentity({ role: 'guest', sub: 'guest:legacy-object-id', orderId: 'DC-GUEST-1' }),
+    'guest-order:DC-GUEST-1',
+  );
+  assert.equal(chatUploadIdentity({ role: 'customer', sub: 'customer-1' }), 'customer:customer-1');
 });

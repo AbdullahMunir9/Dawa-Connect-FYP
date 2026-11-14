@@ -79,8 +79,7 @@ async function assertOrderOwnership(identity, orderId) {
   }
 
   if (identity.role === 'guest') {
-    const expectedSubject = `guest:${String(order._id)}`;
-    if (identity.orderId !== String(order.orderId) || identity.sub !== expectedSubject || order.userId) {
+    if (identity.orderId !== String(order.orderId) || order.userId) {
       throw new ChatError('You cannot access this guest order chat.', 403, 'FORBIDDEN');
     }
     if (isGuestChatExpired(order)) {
@@ -136,7 +135,7 @@ export async function openOrderConversation(identity, orderId) {
       pharmacyId: details.pharmacyId,
       pharmacyName: details.pharmacyName,
       customerId: identity.role === 'customer' ? new mongoose.Types.ObjectId(identity.sub) : null,
-      guestParticipantId: identity.role === 'guest' ? identity.sub : '',
+      guestParticipantId: identity.role === 'guest' ? `guest:${String(order.orderId)}` : '',
       customerName,
     };
     const conversation = await ChatConversation.findOneAndUpdate(
@@ -198,7 +197,7 @@ export async function openPharmacyOrderConversation(identity, orderReference) {
       pharmacyId: details.pharmacyId,
       pharmacyName: details.pharmacyName,
       customerId: hasCustomerAccount ? new mongoose.Types.ObjectId(order.userId) : null,
-      guestParticipantId: hasCustomerAccount ? '' : `guest:${String(order._id)}`,
+      guestParticipantId: hasCustomerAccount ? '' : `guest:${String(order.orderId)}`,
       customerName: order.deliveryAddress?.fullName || (hasCustomerAccount ? 'Customer' : 'Guest customer'),
     };
     const conversation = await ChatConversation.findOneAndUpdate(
@@ -222,7 +221,7 @@ export async function listConversations(identity) {
   let filter;
   if (identity.role === 'pharmacy') filter = { pharmacyId: identity.sub };
   else if (identity.role === 'customer' && mongoose.isValidObjectId(identity.sub)) filter = { customerId: new mongoose.Types.ObjectId(identity.sub) };
-  else if (identity.role === 'guest') filter = { guestParticipantId: identity.sub, orderId: identity.orderId };
+  else if (identity.role === 'guest') filter = { orderId: identity.orderId, customerId: null };
   else throw new ChatError('Invalid chat identity.', 401, 'UNAUTHORIZED');
 
   const conversations = await ChatConversation.find(filter).sort({ lastMessageAt: -1, createdAt: -1 }).limit(200);

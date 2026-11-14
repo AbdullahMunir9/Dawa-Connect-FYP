@@ -72,7 +72,10 @@ export async function POST(req) {
           { status: 410 },
         );
       }
-      subject = `guest:${String(order._id)}`;
+      // Use the public order reference as the stable guest subject. Access is
+      // still protected by the HttpOnly guest cookie above and the signed,
+      // order-scoped JWT, without coupling two deployments to MongoDB's _id.
+      subject = `guest:${String(order.orderId)}`;
       role = "guest";
       guestHistoryExpiresAt = resolveGuestAccessExpiresAt(order).toISOString();
     }

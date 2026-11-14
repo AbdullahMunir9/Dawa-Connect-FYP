@@ -36,9 +36,12 @@ test('rejects legacy multi-pharmacy orders and terminal message states', () => {
 test('normalizes text and enforces participant isolation', () => {
   assert.equal(normalizeChatText('  hello\r\nthere  '), 'hello\nthere');
   assert.throws(() => normalizeChatText(''));
-  const conversation = { pharmacyId: 'p1', customerId: 'c1', guestParticipantId: 'guest:o1', orderId: 'DC-1' };
-  assert.equal(identityCanAccessConversation({ role: 'pharmacy', sub: 'p1' }, conversation), true);
-  assert.equal(identityCanAccessConversation({ role: 'pharmacy', sub: 'p2' }, conversation), false);
-  assert.equal(identityCanAccessConversation({ role: 'customer', sub: 'c1' }, conversation), true);
-  assert.equal(identityCanAccessConversation({ role: 'guest', sub: 'guest:o1', orderId: 'DC-1' }, conversation), true);
+  const customerConversation = { pharmacyId: 'p1', customerId: 'c1', orderId: 'DC-1' };
+  const guestConversation = { pharmacyId: 'p1', customerId: null, guestParticipantId: 'guest:legacy-object-id', orderId: 'DC-2' };
+  assert.equal(identityCanAccessConversation({ role: 'pharmacy', sub: 'p1' }, customerConversation), true);
+  assert.equal(identityCanAccessConversation({ role: 'pharmacy', sub: 'p2' }, customerConversation), false);
+  assert.equal(identityCanAccessConversation({ role: 'customer', sub: 'c1' }, customerConversation), true);
+  assert.equal(identityCanAccessConversation({ role: 'guest', sub: 'guest:any-signed-subject', orderId: 'DC-2' }, guestConversation), true);
+  assert.equal(identityCanAccessConversation({ role: 'guest', sub: 'guest:any-signed-subject', orderId: 'DC-3' }, guestConversation), false);
+  assert.equal(identityCanAccessConversation({ role: 'guest', sub: 'guest:any-signed-subject', orderId: 'DC-1' }, customerConversation), false);
 });

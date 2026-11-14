@@ -67,7 +67,12 @@ export function identityCanAccessConversation(identity, conversation) {
   if (identity.role === 'pharmacy') return String(conversation.pharmacyId) === String(identity.sub);
   if (identity.role === 'customer') return String(conversation.customerId || '') === String(identity.sub);
   if (identity.role === 'guest') {
-    return String(conversation.guestParticipantId || '') === String(identity.sub)
+    // A guest token is issued only after the Marketplace verifies that
+    // browser's guest-order cookie. The signed orderId is therefore the
+    // stable authorization boundary. Do not couple access to MongoDB's
+    // internal ObjectId: doing so makes otherwise valid guest tokens fail
+    // when two deployed services resolve different document identities.
+    return !conversation.customerId
       && String(conversation.orderId) === String(identity.orderId);
   }
   return false;
