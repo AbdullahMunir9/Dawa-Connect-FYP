@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CheckCircle2, Loader2, ShieldCheck, Star, X } from "lucide-react";
 import { cn } from "@/components/ui";
 import { REVIEW_COMMENT_MAX_LENGTH } from "@/lib/reviewPolicy.mjs";
@@ -128,18 +129,18 @@ export default function OrderReviewDialog({ order, review, reviewLoading = false
         {reviewLoading ? "Checking review…" : review ? `Your review: ${review.rating}/5` : "Rate this pharmacy"}
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-[110] flex items-end justify-center bg-gray-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => {
+      {open && createPortal(
+        <div dir="ltr" className="fixed inset-0 z-[110] flex items-end justify-center bg-gray-950/60 p-0 text-left backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => {
           if (event.target === event.currentTarget && !submitting) setOpen(false);
         }}>
           <section
             role="dialog"
             aria-modal="true"
             aria-labelledby={`review-title-${order.orderId}`}
-            className="max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:max-w-lg sm:rounded-3xl"
+            className="max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl bg-white text-left shadow-2xl sm:max-w-lg sm:rounded-3xl"
           >
             <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-gray-100 bg-white px-5 py-4 sm:px-6">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1 text-left">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">Verified purchase</p>
                 <h2 id={`review-title-${order.orderId}`} className="mt-1 truncate text-xl font-bold text-gray-950">
                   {review ? "Edit your pharmacy review" : "How was your experience?"}
@@ -203,7 +204,8 @@ export default function OrderReviewDialog({ order, review, reviewLoading = false
               </form>
             )}
           </section>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
