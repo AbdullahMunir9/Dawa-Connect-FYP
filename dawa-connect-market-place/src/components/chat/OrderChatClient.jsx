@@ -23,6 +23,25 @@ function mergeMessage(list, message) {
   return [...list, message].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 }
 
+async function chatApiRequest({ serviceUrl, token }, path, options = {}) {
+  const response = await fetch(`${serviceUrl}${path}`, {
+    ...options,
+    cache: "no-store",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...options.headers,
+    },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw Object.assign(new Error(data.message || "Chat request failed."), {
+      code: data.code || "CHAT_REQUEST_FAILED",
+    });
+  }
+  return data;
+}
+
 function timeLabel(value) {
   return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
@@ -74,6 +93,25 @@ export default function OrderChatClient({ orderId }) {
           guestHistoryExpiresAt: credentials.guestHistoryExpiresAt || null,
           retentionDays: credentials.guestHistoryRetentionDays || null,
         });
+
+        // Establish and load the durable conversation through the HTTP API.
+        // Socket.IO is then responsible only for joining the room and carrying
+        // real-time events, avoiding a fragile socket acknowledgement during
+        // initial authorization.
+        const openedResponse = await chatApiRequest(credentials, "/api/chat/conversations", {
+          method: "POST",
+          body: JSON.stringify({ orderId }),
+        });
+        const opened = openedResponse.conversation;
+        const history = await chatApiRequest(
+          credentials,
+          `/api/chat/conversations/${encodeURIComponent(opened.id)}/messages?limit=50`,
+        );
+        if (cancelled) return;
+        setConversation(opened);
+        setMessages(history.messages || []);
+        setLoading(false);
+
         const socket = io(credentials.serviceUrl, {
           auth: { token: credentials.token },
           // Start with HTTP long-polling, which works reliably through Vercel,
@@ -91,16 +129,10 @@ export default function OrderChatClient({ orderId }) {
           setConnectionState("connected");
           setError("");
           try {
-            const opened = await emitWithAck(socket, "conversation:open", { orderId });
-            const history = await emitWithAck(socket, "message:history", { conversationId: opened.id, limit: 50 });
-            if (cancelled) return;
-            setConversation(opened);
-            setMessages(history.messages || []);
+            await emitWithAck(socket, "conversation:join", { conversationId: opened.id });
             await emitWithAck(socket, "message:read", { conversationId: opened.id });
           } catch (chatError) {
             if (!cancelled) setError(chatError.message);
-          } finally {
-            if (!cancelled) setLoading(false);
           }
         });
 

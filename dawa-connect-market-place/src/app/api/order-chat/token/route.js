@@ -54,7 +54,10 @@ export async function POST(req) {
     if (!serviceUrl) return NextResponse.json({ message: "Live chat service is not configured." }, { status: 503 });
 
     await connectToDatabase();
-    const order = await Order.findOne({ orderId: normalizedOrderId }).select("+guestSessionHash guestAccessExpiresAt createdAt");
+    // `guestSessionHash` is the only field excluded by the schema. Using an
+    // inclusive projection here would silently omit `userId` and make every
+    // registered order look like a guest order.
+    const order = await Order.findOne({ orderId: normalizedOrderId }).select("+guestSessionHash");
     if (!order) return NextResponse.json({ message: "Order not found." }, { status: 404 });
     const marketplaceUserIds = await marketplaceIdentities(req);
     const orderOwnerId = String(order.userId || "");
