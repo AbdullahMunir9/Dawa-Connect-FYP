@@ -41,8 +41,8 @@ function encodedPublicId(publicId) {
 }
 
 export function chatUploadIdentity(identity) {
-  if (identity?.role === 'guest' && identity.orderId) {
-    return `guest-order:${String(identity.orderId)}`;
+  if (['customer', 'guest'].includes(identity?.role) && identity.orderId) {
+    return `${identity.role}-order:${String(identity.orderId)}`;
   }
   return `${identity.role}:${identity.sub}`;
 }

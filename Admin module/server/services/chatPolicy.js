@@ -65,7 +65,10 @@ export function normalizeChatText(value) {
 export function identityCanAccessConversation(identity, conversation) {
   if (!identity || !conversation) return false;
   if (identity.role === 'pharmacy') return String(conversation.pharmacyId) === String(identity.sub);
-  if (identity.role === 'customer') return String(conversation.customerId || '') === String(identity.sub);
+  if (identity.role === 'customer') {
+    return Boolean(conversation.customerId)
+      && String(conversation.orderId) === String(identity.orderId);
+  }
   if (identity.role === 'guest') {
     // A guest token is issued only after the Marketplace verifies that
     // browser's guest-order cookie. The signed orderId is therefore the

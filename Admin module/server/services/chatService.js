@@ -68,9 +68,11 @@ async function assertOrderOwnership(identity, orderId) {
   if (!order) throw new ChatError('Order not found.', 404, 'ORDER_NOT_FOUND');
 
   if (identity.role === 'customer') {
-    if (String(order.userId || '') !== identity.sub) throw new ChatError('You cannot access this order chat.', 403, 'FORBIDDEN');
-    const customer = mongoose.isValidObjectId(identity.sub)
-      ? await User.findById(identity.sub).select('name status').lean()
+    if (identity.orderId !== String(order.orderId) || !order.userId) {
+      throw new ChatError('You cannot access this order chat.', 403, 'FORBIDDEN');
+    }
+    const customer = mongoose.isValidObjectId(order.userId)
+      ? await User.findById(order.userId).select('name status').lean()
       : null;
     if (!customer || String(customer.status || 'active').toLowerCase() === 'suspended') {
       throw new ChatError('This customer account cannot use chat.', 403, 'CUSTOMER_UNAVAILABLE');
@@ -134,7 +136,7 @@ export async function openOrderConversation(identity, orderId) {
       pharmacyOrderId: details.pharmacyOrderId,
       pharmacyId: details.pharmacyId,
       pharmacyName: details.pharmacyName,
-      customerId: identity.role === 'customer' ? new mongoose.Types.ObjectId(identity.sub) : null,
+      customerId: identity.role === 'customer' ? new mongoose.Types.ObjectId(order.userId) : null,
       guestParticipantId: identity.role === 'guest' ? `guest:${String(order.orderId)}` : '',
       customerName,
     };
@@ -220,7 +222,7 @@ export async function openPharmacyOrderConversation(identity, orderReference) {
 export async function listConversations(identity) {
   let filter;
   if (identity.role === 'pharmacy') filter = { pharmacyId: identity.sub };
-  else if (identity.role === 'customer' && mongoose.isValidObjectId(identity.sub)) filter = { customerId: new mongoose.Types.ObjectId(identity.sub) };
+  else if (identity.role === 'customer') filter = { orderId: identity.orderId, customerId: { $ne: null } };
   else if (identity.role === 'guest') filter = { orderId: identity.orderId, customerId: null };
   else throw new ChatError('Invalid chat identity.', 401, 'UNAUTHORIZED');
 
@@ -281,7 +283,11 @@ export async function sendMessage(identity, conversationId, { text, clientMessag
   try {
     message = await ChatMessage.create({
       conversationId: conversation._id,
-      senderId: identity.sub,
+      senderId: identity.role === 'customer'
+        ? String(conversation.customerId)
+        : identity.role === 'guest'
+          ? `guest:${String(conversation.orderId)}`
+          : identity.sub,
       senderType: identity.role,
       clientMessageId: idempotencyKey,
       text: normalizedText,

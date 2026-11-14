@@ -33,9 +33,15 @@ export function verifyChatToken(token) {
   });
   const role = String(payload.role || '');
   const sub = String(payload.sub || '');
+  const issuer = String(payload.iss || '');
+  const orderId = payload.orderId ? String(payload.orderId) : '';
   if (!['customer', 'guest', 'pharmacy'].includes(role) || !sub) throw new Error('Invalid chat identity.');
-  if (role === 'guest' && !payload.orderId) throw new Error('Guest chat access must be scoped to an order.');
-  return { sub, role, orderId: payload.orderId ? String(payload.orderId) : '' };
+  if (role === 'pharmacy') {
+    if (issuer !== 'dawaconnect-chat-service') throw new Error('Invalid pharmacy chat issuer.');
+  } else if (issuer !== 'dawaconnect-marketplace' || !orderId) {
+    throw new Error('Marketplace chat access must be scoped to an order.');
+  }
+  return { sub, role, orderId, issuer };
 }
 
 export function requireChatAuth(req, res, next) {

@@ -49,10 +49,15 @@ export default function OrderChatClient({ orderId }) {
     const response = await fetch("/api/order-chat/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({ orderId }),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || "Live chat could not be opened.");
+    if (!response.ok) {
+      throw Object.assign(new Error(data.message || "Live chat could not be opened."), {
+        code: data.code || "CHAT_TOKEN_FAILED",
+      });
+    }
     return data;
   }, [orderId]);
 

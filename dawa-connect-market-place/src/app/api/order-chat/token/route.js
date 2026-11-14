@@ -23,15 +23,24 @@ function guestHash(token) {
   return createHash("sha256").update(String(token || "")).digest("hex");
 }
 
-async function marketplaceIdentity(req) {
-  const token = req.cookies.get("auth_token")?.value;
-  if (!token) return null;
-  try {
-    const { payload } = await jwtVerify(token, secretKey(process.env.JWT_SECRET, "JWT_SECRET"));
-    return payload.userId && mongoose.isValidObjectId(payload.userId) ? String(payload.userId) : null;
-  } catch {
-    return null;
+async function marketplaceIdentities(req) {
+  const jwtKey = secretKey(process.env.JWT_SECRET, "JWT_SECRET");
+  const candidates = req.cookies.getAll?.("auth_token") || [];
+  const tokens = candidates.length
+    ? candidates.map((cookie) => cookie.value)
+    : [req.cookies.get("auth_token")?.value].filter(Boolean);
+  const identities = [];
+  for (const token of new Set(tokens)) {
+    try {
+      const { payload } = await jwtVerify(token, jwtKey);
+      if (payload.userId && mongoose.isValidObjectId(payload.userId)) {
+        identities.push(String(payload.userId));
+      }
+    } catch {
+      // A stale duplicate cookie must not override a current valid session.
+    }
   }
+  return [...new Set(identities)];
 }
 
 export async function POST(req) {
@@ -45,14 +54,27 @@ export async function POST(req) {
     if (!serviceUrl) return NextResponse.json({ message: "Live chat service is not configured." }, { status: 503 });
 
     await connectToDatabase();
-    const userId = await marketplaceIdentity(req);
     const order = await Order.findOne({ orderId: normalizedOrderId }).select("+guestSessionHash guestAccessExpiresAt createdAt");
     if (!order) return NextResponse.json({ message: "Order not found." }, { status: 404 });
+    const marketplaceUserIds = await marketplaceIdentities(req);
+    const orderOwnerId = String(order.userId || "");
+    const userId = marketplaceUserIds.find((candidate) => candidate === orderOwnerId) || null;
 
     let subject;
     let role;
     let guestHistoryExpiresAt = null;
-    if (userId && String(order.userId || "") === userId) {
+    if (orderOwnerId) {
+      if (!userId) {
+        return NextResponse.json(
+          {
+            message: marketplaceUserIds.length
+              ? "This order belongs to a different marketplace account."
+              : "Your marketplace session could not be verified. Sign out and sign in again.",
+            code: marketplaceUserIds.length ? "ORDER_ACCOUNT_MISMATCH" : "CHAT_SESSION_REQUIRED",
+          },
+          { status: 403 },
+        );
+      }
       const user = await User.findById(userId).select("status").lean();
       if (!user || String(user.status || "active").toLowerCase() === "suspended") {
         return NextResponse.json({ message: "This account cannot use live chat." }, { status: 403 });
@@ -65,7 +87,12 @@ export async function POST(req) {
         && guestToken
         && order.guestSessionHash
         && guestHash(guestToken) === order.guestSessionHash;
-      if (!matchesGuest) return NextResponse.json({ message: "You cannot access this order chat." }, { status: 403 });
+      if (!matchesGuest) {
+        return NextResponse.json(
+          { message: "This browser cannot access this guest order chat.", code: "GUEST_ORDER_ACCESS_REQUIRED" },
+          { status: 403 },
+        );
+      }
       if (isGuestAccessExpired(order)) {
         return NextResponse.json(
           { message: "This guest order chat expired after 15 days. Sign in before placing future orders to keep permanent chat history." },
@@ -80,7 +107,7 @@ export async function POST(req) {
       guestHistoryExpiresAt = resolveGuestAccessExpiresAt(order).toISOString();
     }
 
-    const chatToken = await new SignJWT({ role, orderId: String(order.orderId) })
+    const chatToken = await new SignJWT({ role, orderId: String(order.orderId), tokenVersion: 2 })
       .setProtectedHeader({ alg: "HS256" })
       .setSubject(subject)
       .setAudience("dawaconnect-chat")
@@ -97,6 +124,7 @@ export async function POST(req) {
         role,
         guestHistoryExpiresAt,
         guestHistoryRetentionDays: role === "guest" ? GUEST_ORDER_ACCESS_DAYS : null,
+        accessVersion: "order-capability-v2",
       },
       { headers: { "Cache-Control": "no-store" } },
     );

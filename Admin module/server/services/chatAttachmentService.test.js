@@ -73,5 +73,9 @@ test('uses the signed order scope as the stable guest upload identity', () => {
     chatUploadIdentity({ role: 'guest', sub: 'guest:legacy-object-id', orderId: 'DC-GUEST-1' }),
     'guest-order:DC-GUEST-1',
   );
-  assert.equal(chatUploadIdentity({ role: 'customer', sub: 'customer-1' }), 'customer:customer-1');
+  assert.equal(
+    chatUploadIdentity({ role: 'customer', sub: 'customer-1', orderId: 'DC-CUSTOMER-1' }),
+    'customer-order:DC-CUSTOMER-1',
+  );
+  assert.equal(chatUploadIdentity({ role: 'pharmacy', sub: 'pharmacy-1' }), 'pharmacy:pharmacy-1');
 });

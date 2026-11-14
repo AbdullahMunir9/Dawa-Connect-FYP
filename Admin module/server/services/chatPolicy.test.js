@@ -40,7 +40,9 @@ test('normalizes text and enforces participant isolation', () => {
   const guestConversation = { pharmacyId: 'p1', customerId: null, guestParticipantId: 'guest:legacy-object-id', orderId: 'DC-2' };
   assert.equal(identityCanAccessConversation({ role: 'pharmacy', sub: 'p1' }, customerConversation), true);
   assert.equal(identityCanAccessConversation({ role: 'pharmacy', sub: 'p2' }, customerConversation), false);
-  assert.equal(identityCanAccessConversation({ role: 'customer', sub: 'c1' }, customerConversation), true);
+  assert.equal(identityCanAccessConversation({ role: 'customer', sub: 'c1', orderId: 'DC-1' }, customerConversation), true);
+  assert.equal(identityCanAccessConversation({ role: 'customer', sub: 'another-subject', orderId: 'DC-1' }, customerConversation), true);
+  assert.equal(identityCanAccessConversation({ role: 'customer', sub: 'c1', orderId: 'DC-2' }, customerConversation), false);
   assert.equal(identityCanAccessConversation({ role: 'guest', sub: 'guest:any-signed-subject', orderId: 'DC-2' }, guestConversation), true);
   assert.equal(identityCanAccessConversation({ role: 'guest', sub: 'guest:any-signed-subject', orderId: 'DC-3' }, guestConversation), false);
   assert.equal(identityCanAccessConversation({ role: 'guest', sub: 'guest:any-signed-subject', orderId: 'DC-1' }, customerConversation), false);
