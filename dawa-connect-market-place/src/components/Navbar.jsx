@@ -27,7 +27,9 @@ export default function Navbar() {
   const hideNavSearch =
     pathname.startsWith("/pharmacies") ||
     pathname.startsWith("/assistant") ||
-    pathname.startsWith("/dashboard");
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/cart") ||
+    pathname.startsWith("/checkout");
 
   // Search in navbar: not on Home, and not on Pharmacies / AI Assistant / User Portal
   const showSearch = pathname !== "/" && !hideNavSearch;
