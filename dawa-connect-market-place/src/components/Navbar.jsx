@@ -24,12 +24,14 @@ export default function Navbar() {
     setAuthReturnPath(`${window.location.pathname}${window.location.search}${window.location.hash}`);
   }, [pathname]);
   
+  const isCommerceRoute =
+    pathname.startsWith("/cart") ||
+    pathname.startsWith("/checkout");
   const hideNavSearch =
     pathname.startsWith("/pharmacies") ||
     pathname.startsWith("/assistant") ||
     pathname.startsWith("/dashboard") ||
-    pathname.startsWith("/cart") ||
-    pathname.startsWith("/checkout");
+    isCommerceRoute;
 
   // Search in navbar: not on Home, and not on Pharmacies / AI Assistant / User Portal
   const showSearch = pathname !== "/" && !hideNavSearch;
@@ -89,6 +91,9 @@ export default function Navbar() {
               </div>
               <VoiceMedicineSearchButton compact size="sm" className="shrink-0" />
             </form>
+          )}
+          {isCommerceRoute && (
+            <div className="hidden flex-1 max-w-md mx-4 lg:block" aria-hidden="true" />
           )}
 
           {/* Right Icons */}
