@@ -38,66 +38,60 @@ export default function Navbar() {
 
   return (
     <nav className="border-b bg-white sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 gap-2 sm:gap-4">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
+        <div className="grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-3">
           
           {/* Logo */}
-          <div className="flex-shrink-0">
-            <Link href="/" className="text-base sm:text-xl font-bold text-blue-600">
+          <div className="min-w-0 justify-self-start">
+            <Link href="/" className="text-xl font-bold tracking-tight text-blue-600 sm:text-2xl">
               DawaConnect
             </Link>
           </div>
 
           {/* Links */}
-          <div className="hidden md:flex flex-1 justify-center space-x-4 lg:space-x-6">
-            <Link href="/" className={`text-sm font-medium px-1 py-5 whitespace-nowrap ${pathname === '/' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
+          <div className="hidden items-center justify-self-center space-x-4 md:flex lg:space-x-7">
+            <Link href="/" className={`whitespace-nowrap px-1 py-5 text-[15px] font-medium ${pathname === '/' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
               Home
             </Link>
-            <Link href="/pharmacies" className={`text-sm font-medium px-1 py-5 whitespace-nowrap ${pathname.startsWith('/pharmacies') && pathname !== '/pharmacies/map' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
+            <Link href="/pharmacies" className={`whitespace-nowrap px-1 py-5 text-[15px] font-medium ${pathname.startsWith('/pharmacies') && pathname !== '/pharmacies/map' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
               Pharmacies
             </Link>
-            <Link href="/pharmacies/map" className={`text-sm font-medium px-1 py-5 whitespace-nowrap ${pathname === '/pharmacies/map' ? 'text-teal-700 border-b-2 border-teal-600' : 'text-gray-500 hover:text-gray-900'}`}>
+            <Link href="/pharmacies/map" className={`whitespace-nowrap px-1 py-5 text-[15px] font-medium ${pathname === '/pharmacies/map' ? 'text-teal-700 border-b-2 border-teal-600' : 'text-gray-500 hover:text-gray-900'}`}>
               Find Care
             </Link>
-            <Link href="/assistant" className={`text-sm font-medium px-1 py-5 whitespace-nowrap ${pathname.startsWith('/assistant') ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
+            <Link href="/assistant" className={`whitespace-nowrap px-1 py-5 text-[15px] font-medium ${pathname.startsWith('/assistant') ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
               AI Assistant
             </Link>
-            <Link href={portalHref} prefetch={false} className={`text-sm font-medium px-1 py-5 whitespace-nowrap ${pathname.startsWith('/dashboard') ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
+            <Link href={portalHref} prefetch={false} className={`whitespace-nowrap px-1 py-5 text-[15px] font-medium ${pathname.startsWith('/dashboard') ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-900'}`}>
               User Portal
             </Link>
           </div>
 
-          {/* Optional Search Bar */}
-          {showSearch && (
-            <form
-              className="hidden lg:flex flex-1 max-w-md mx-4 gap-2 items-center"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void recordSearchAndNavigate(router, navQuery).then(() => setNavQuery(""));
-              }}
-            >
-              <div className="relative w-full flex-1 min-w-0">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-gray-400" />
-                </div>
-                <input
-                  type="search"
-                  value={navQuery}
-                  onChange={(e) => setNavQuery(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-md leading-5 bg-gray-50 placeholder-gray-400 focus:outline-none focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  placeholder="Search medicines..."
-                  aria-label="Search medicines"
-                />
-              </div>
-              <VoiceMedicineSearchButton compact size="sm" className="shrink-0" />
-            </form>
-          )}
-          {isCommerceRoute && (
-            <div className="hidden flex-1 max-w-md mx-4 lg:block" aria-hidden="true" />
-          )}
-
           {/* Right Icons */}
-          <div className="flex items-center gap-3 lg:gap-5">
+          <div className="flex min-w-0 items-center justify-self-end gap-3 lg:gap-4">
+            {showSearch && (
+              <form
+                className="hidden w-52 items-center gap-2 min-[1800px]:flex"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void recordSearchAndNavigate(router, navQuery).then(() => setNavQuery(""));
+                }}
+              >
+                <div className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="search"
+                    value={navQuery}
+                    onChange={(e) => setNavQuery(e.target.value)}
+                    className="block w-full rounded-md border border-gray-200 bg-gray-50 py-2 pl-9 pr-3 text-sm leading-5 placeholder-gray-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="Search medicines..."
+                    aria-label="Search medicines"
+                  />
+                </div>
+                <VoiceMedicineSearchButton compact size="sm" className="shrink-0" />
+              </form>
+            )}
+            {showSearch && <Link href="/search" className="hidden text-gray-500 hover:text-gray-900 lg:block min-[1800px]:hidden" aria-label="Search medicines"><Search className="h-5 w-5" /></Link>}
             <Link href="/pharmacies/map" className="md:hidden text-teal-700" aria-label="Find nearby care on the map"><MapPinned className="h-5 w-5" /></Link>
             {pathname === "/" && (
               <button type="button" className="hidden sm:block text-gray-500 hover:text-gray-900 md:hidden" aria-label="Search">
@@ -122,7 +116,7 @@ export default function Navbar() {
                   <div className="flex items-center gap-2">
                     <Link href="/dashboard" prefetch={false} className="hidden sm:flex text-gray-500 hover:text-gray-900 items-center gap-2">
                       <UserAvatar user={user} className="h-6 w-6 text-[10px]" fallbackClassName="bg-blue-50 text-blue-700" />
-                      <span className="hidden md:inline text-sm font-medium">{user.name}</span>
+                      <span className={`hidden text-sm font-medium md:inline ${showSearch ? "min-[1800px]:hidden" : ""}`}>{user.name}</span>
                     </Link>
                     <button onClick={logout} className="text-sm font-medium text-red-600 hover:text-red-700 border border-red-200 px-3 py-1.5 rounded-md hover:bg-red-50 transition-colors">
                       Logout
