@@ -337,6 +337,7 @@ async function connectPharmacyChat(sessionToken) {
     })
     socket.on('message:new', (data) => broadcastChatEvent('message:new', data))
     socket.on('conversation:updated', (data) => broadcastChatEvent('conversation:updated', data))
+    socket.on('cancellation:updated', (data) => broadcastChatEvent('cancellation:updated', data))
     socket.on('notification:new', (data) => void handleRealtimeNotification(data))
     socket.on('notification:sync', (data) => void handleNotificationSync(data))
 
@@ -911,6 +912,18 @@ app.whenReady().then(async () => {
   ipcMain.handle('chat:mark-read', async (_event, payload) => {
     try {
       return { ok: true, data: await emitChatEvent('message:read', { conversationId: payload?.conversationId }) }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('chat:respond-cancellation', async (_event, payload) => {
+    try {
+      return { ok: true, data: await emitChatEvent('cancellation:respond', {
+        conversationId: payload?.conversationId,
+        decision: payload?.decision,
+        response: payload?.response
+      }) }
     } catch (error) {
       return { ok: false, error: error.message }
     }

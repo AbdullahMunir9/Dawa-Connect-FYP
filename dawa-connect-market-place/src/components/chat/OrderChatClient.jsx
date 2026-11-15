@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
-import { ArrowLeft, CheckCircle2, Clock3, ImagePlus, Loader2, LockKeyhole, MessageCircle, Send, Store, UserPlus, X } from "lucide-react";
+import { ArrowLeft, Ban, CheckCircle2, Clock3, ImagePlus, Loader2, LockKeyhole, MessageCircle, Send, Store, UserPlus, X } from "lucide-react";
 
 const CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const CHAT_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -62,6 +62,9 @@ export default function OrderChatClient({ orderId }) {
   const [openImage, setOpenImage] = useState(null);
   const [connectionState, setConnectionState] = useState("connecting");
   const [error, setError] = useState("");
+  const [showCancellationForm, setShowCancellationForm] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [requestingCancellation, setRequestingCancellation] = useState(false);
   const [chatAccess, setChatAccess] = useState({ role: null, guestHistoryExpiresAt: null, retentionDays: null });
 
   const getToken = useCallback(async () => {
@@ -159,6 +162,11 @@ export default function OrderChatClient({ orderId }) {
         });
         socket.on("conversation:updated", (updated) => {
           setConversation((current) => current?.id === updated?.id ? { ...current, ...updated } : current);
+        });
+        socket.on("cancellation:updated", (updated) => {
+          setConversation((current) => current?.id === updated?.id ? { ...current, ...updated } : current);
+          setShowCancellationForm(false);
+          setCancellationReason("");
         });
 
         refreshTimerRef.current = setInterval(async () => {
@@ -311,6 +319,30 @@ export default function OrderChatClient({ orderId }) {
     }
   };
 
+  const requestCancellation = async () => {
+    const reason = cancellationReason.trim();
+    if (reason.length < 3 || !conversation?.id || requestingCancellation || !socketRef.current?.connected) return;
+    setRequestingCancellation(true);
+    setError("");
+    try {
+      const updated = await emitWithAck(socketRef.current, "cancellation:request", {
+        conversationId: conversation.id,
+        reason,
+      });
+      setConversation(updated);
+      setShowCancellationForm(false);
+      setCancellationReason("");
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setRequestingCancellation(false);
+    }
+  };
+
+  const cancellationRequest = conversation?.cancellationRequest || null;
+  const canRequestCancellation = ["Confirmed", "Packed"].includes(conversation?.orderStatus)
+    && !cancellationRequest;
+
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8">
       <Link href={`/track/${encodeURIComponent(orderId)}`} className="mb-4 inline-flex w-fit items-center gap-2 text-sm font-semibold text-blue-800 hover:text-blue-950"><ArrowLeft className="h-4 w-4" /> Back to order</Link>
@@ -346,6 +378,48 @@ export default function OrderChatClient({ orderId }) {
                 </Link>
               </div>
             </div>
+          </div>
+        )}
+
+        {!loading && conversation && (
+          <div className="border-b border-gray-200 bg-white px-5 py-4 sm:px-6">
+            {cancellationRequest ? (
+              <div className={`rounded-2xl border p-4 ${cancellationRequest.status === "approved" ? "border-emerald-200 bg-emerald-50" : cancellationRequest.status === "rejected" || cancellationRequest.status === "expired" ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"}`}>
+                <div className="flex items-start gap-3">
+                  <Ban className="mt-0.5 h-5 w-5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="font-semibold capitalize text-gray-900">Cancellation request: {cancellationRequest.status}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{cancellationRequest.reason}</p>
+                    {cancellationRequest.response && <p className="mt-2 text-sm font-medium text-gray-800">Pharmacy response: {cancellationRequest.response}</p>}
+                    {cancellationRequest.status === "pending" && <p className="mt-2 text-xs text-gray-600">The pharmacy must approve this request. The order is not cancelled yet.</p>}
+                  </div>
+                </div>
+              </div>
+            ) : canRequestCancellation ? (
+              showCancellationForm ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <label htmlFor="chat-cancellation-reason" className="text-sm font-semibold text-amber-950">Why do you want to cancel this order?</label>
+                  <textarea id="chat-cancellation-reason" value={cancellationReason} onChange={(event) => setCancellationReason(event.target.value.slice(0, 500))} maxLength={500} rows={3} className="mt-2 w-full resize-none rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm outline-none focus:border-amber-500" placeholder="Give the pharmacy a short reason…" />
+                  <p className="mt-1 text-xs text-amber-800">This is a request only. The pharmacy decides whether it can still cancel the confirmed order.</p>
+                  <div className="mt-3 flex gap-2">
+                    <button type="button" onClick={() => { setShowCancellationForm(false); setCancellationReason(""); }} disabled={requestingCancellation} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700">Keep order</button>
+                    <button type="button" onClick={requestCancellation} disabled={requestingCancellation || cancellationReason.trim().length < 3 || connectionState !== "connected"} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{requestingCancellation ? "Sending…" : "Send cancellation request"}</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div><p className="text-sm font-semibold text-gray-900">Need to cancel this confirmed order?</p><p className="mt-0.5 text-xs text-gray-500">You may request cancellation until the order is dispatched.</p></div>
+                  <button type="button" onClick={() => setShowCancellationForm(true)} className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"><Ban className="h-4 w-4" /> Request cancellation</button>
+                </div>
+              )
+            ) : ["Processing", "Pending"].includes(conversation.orderStatus) ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div><p className="text-sm font-semibold text-gray-900">The pharmacy has not confirmed this order yet.</p><p className="mt-0.5 text-xs text-gray-500">You can cancel it immediately from the order tracking page.</p></div>
+                <Link href={`/track/${encodeURIComponent(orderId)}`} className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Open order</Link>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">Cancellation requests are closed because this order is {String(conversation.orderStatus || "complete").toLowerCase()}.</p>
+            )}
           </div>
         )}
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Check, Clock, Home, MessageCircle, Package, Store, Truck } from "lucide-react";
+import { Check, Clock, Home, MessageCircle, Package, Store, Truck, XCircle } from "lucide-react";
 import { formatPKR } from "@/lib/currency";
 import OrderReviewDialog from "@/components/reviews/OrderReviewDialog";
 import useOrderReviews from "@/hooks/useOrderReviews";
@@ -16,6 +16,10 @@ export default function TrackDelivery() {
   const [order, setOrder] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [showCancellation, setShowCancellation] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [cancellationError, setCancellationError] = useState("");
   const { reviewsByOrder, loading: reviewsLoading, saveReview } = useOrderReviews({ enabled: Boolean(id), orderId: id || "" });
 
   useEffect(() => {
@@ -50,6 +54,31 @@ export default function TrackDelivery() {
     ? STEPS.indexOf("Dispatched")
     : STEPS.indexOf(order.status);
   const address = order.deliveryAddress || {};
+  const canCancelDirectly = order.status === "Processing"
+    && (order.fulfillments || []).every((fulfillment) => fulfillment.status === "Pending");
+
+  const cancelOrder = async () => {
+    if (!canCancelDirectly || cancelling) return;
+    setCancelling(true);
+    setCancellationError("");
+    try {
+      const response = await fetch(`/api/orders/${encodeURIComponent(order.orderId)}/cancel`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: cancellationReason }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "The order could not be cancelled.");
+      setOrder(data.order);
+      setShowCancellation(false);
+      setCancellationReason("");
+    } catch (requestError) {
+      setCancellationError(requestError.message);
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50 py-10 px-4 sm:px-6 lg:px-8">
@@ -143,6 +172,24 @@ export default function TrackDelivery() {
             <Link href={`/chat/order/${encodeURIComponent(order.orderId)}`} className="flex items-center justify-center gap-2 rounded-lg bg-blue-800 py-3 text-center font-semibold text-white hover:bg-blue-900">
               <MessageCircle className="h-4 w-4" /> Chat with pharmacy
             </Link>
+            {canCancelDirectly && !showCancellation && (
+              <button type="button" onClick={() => setShowCancellation(true)} className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-white py-3 font-semibold text-red-700 hover:bg-red-50">
+                <XCircle className="h-4 w-4" /> Cancel order
+              </button>
+            )}
+            {canCancelDirectly && showCancellation && (
+              <section className="rounded-xl border border-red-200 bg-red-50 p-4">
+                <h2 className="font-semibold text-red-900">Cancel before confirmation</h2>
+                <p className="mt-1 text-xs leading-5 text-red-700">This immediately cancels the order and returns the reserved items to pharmacy stock. After confirmation, cancellation must be requested in chat.</p>
+                <label htmlFor="cancellation-reason" className="mt-3 block text-xs font-semibold text-red-900">Reason (optional)</label>
+                <textarea id="cancellation-reason" value={cancellationReason} onChange={(event) => setCancellationReason(event.target.value.slice(0, 500))} rows={3} maxLength={500} className="mt-1 w-full resize-none rounded-lg border border-red-200 bg-white px-3 py-2 text-sm outline-none focus:border-red-400" placeholder="Why are you cancelling?" />
+                {cancellationError && <p className="mt-2 text-xs font-medium text-red-700">{cancellationError}</p>}
+                <div className="mt-3 flex gap-2">
+                  <button type="button" onClick={() => { setShowCancellation(false); setCancellationError(""); }} disabled={cancelling} className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 disabled:opacity-50">Keep order</button>
+                  <button type="button" onClick={cancelOrder} disabled={cancelling} className="flex-1 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">{cancelling ? "Cancelling…" : "Confirm cancellation"}</button>
+                </div>
+              </section>
+            )}
             <OrderReviewDialog
               order={order}
               review={reviewsByOrder[order.orderId] || null}

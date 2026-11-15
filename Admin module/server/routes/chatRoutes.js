@@ -10,6 +10,8 @@ import {
   listMessages,
   markConversationRead,
   openOrderConversation,
+  requestOrderCancellation,
+  respondToCancellationRequest,
 } from '../services/chatService.js';
 import { createChatUploadGrant } from '../services/chatAttachmentService.js';
 
@@ -97,6 +99,26 @@ export default function createChatRouter() {
   router.post('/conversations/:id/read', async (req, res) => {
     try {
       return res.json({ conversation: await markConversationRead(req.chatIdentity, req.params.id) });
+    } catch (error) {
+      return errorResponse(res, error);
+    }
+  });
+
+  router.post('/conversations/:id/cancellation-request', async (req, res) => {
+    try {
+      return res.status(201).json({
+        conversation: await requestOrderCancellation(req.chatIdentity, req.params.id, req.body || {}),
+      });
+    } catch (error) {
+      return errorResponse(res, error);
+    }
+  });
+
+  router.patch('/conversations/:id/cancellation-request', async (req, res) => {
+    try {
+      return res.json({
+        conversation: await respondToCancellationRequest(req.chatIdentity, req.params.id, req.body || {}),
+      });
     } catch (error) {
       return errorResponse(res, error);
     }

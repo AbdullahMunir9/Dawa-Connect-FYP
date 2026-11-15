@@ -4,14 +4,17 @@ import ChatMessage from '../models/ChatMessage.js';
 import Order from '../models/Order.js';
 import User from '../models/User.js';
 import {
+  canRequestOrderCancellation,
   deriveOrderChatDetails,
   identityCanAccessConversation,
   isGuestChatExpired,
   isChatWritableStatus,
+  normalizeCancellationReason,
   normalizeChatText,
   resolveGuestChatExpiresAt,
 } from './chatPolicy.js';
 import { authorizeChatAttachments, commitChatAttachments } from './chatAttachmentService.js';
+import { updateEntity } from './pharmacyService.js';
 
 export class ChatError extends Error {
   constructor(message, status = 400, code = 'CHAT_ERROR') {
@@ -57,6 +60,7 @@ function conversationView(conversation) {
     lastMessagePreview: doc.lastMessagePreview || '',
     customerUnreadCount: Number(doc.customerUnreadCount || 0),
     pharmacyUnreadCount: Number(doc.pharmacyUnreadCount || 0),
+    cancellationRequest: doc.cancellationRequest || null,
     expiresAt: doc.expiresAt || null,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
@@ -109,13 +113,34 @@ async function syncConversationState(conversation) {
   const details = deriveOrderChatDetails(order);
   const writable = isChatWritableStatus(details.orderStatus);
   const nextStatus = writable ? 'active' : 'read_only';
+  const request = conversation.cancellationRequest;
+  let cancellationUpdate = null;
+  if (request?.status === 'pending' && details.orderStatus === 'Cancelled') {
+    cancellationUpdate = {
+      'cancellationRequest.status': 'approved',
+      'cancellationRequest.reviewedAt': new Date(),
+      'cancellationRequest.response': request.response || 'The pharmacy cancelled this order.',
+    };
+  } else if (request?.status === 'pending' && ['Dispatched', 'Delivered'].includes(details.orderStatus)) {
+    cancellationUpdate = {
+      'cancellationRequest.status': 'expired',
+      'cancellationRequest.reviewedAt': new Date(),
+      'cancellationRequest.response': 'The order progressed to dispatch before this request was approved.',
+    };
+  }
   const expiryChanged = String(conversation.expiresAt || '') !== String(expiresAt || '');
-  if (conversation.orderStatus !== details.orderStatus || conversation.status !== nextStatus || expiryChanged) {
+  if (conversation.orderStatus !== details.orderStatus || conversation.status !== nextStatus || expiryChanged || cancellationUpdate) {
     conversation.orderStatus = details.orderStatus;
     conversation.status = nextStatus;
     conversation.closedReason = writable ? '' : details.orderStatus.toLowerCase().replace(/\s+/g, '_');
     conversation.closedAt = writable ? null : (conversation.closedAt || new Date());
     conversation.expiresAt = expiresAt;
+    if (cancellationUpdate) {
+      conversation.cancellationRequest.status = cancellationUpdate['cancellationRequest.status'];
+      conversation.cancellationRequest.reviewedAt = cancellationUpdate['cancellationRequest.reviewedAt'];
+      conversation.cancellationRequest.response = cancellationUpdate['cancellationRequest.response'];
+      conversation.markModified('cancellationRequest');
+    }
     await conversation.save();
     if (expiresAt) {
       await ChatMessage.updateMany({ conversationId: conversation._id }, { $set: { expiresAt } });
@@ -328,5 +353,126 @@ export async function markConversationRead(identity, conversationId) {
     ? { pharmacyUnreadCount: 0, pharmacyLastReadAt: now }
     : { customerUnreadCount: 0, customerLastReadAt: now };
   const updated = await ChatConversation.findByIdAndUpdate(conversation._id, { $set: update }, { new: true });
+  return conversationView(updated);
+}
+
+export async function requestOrderCancellation(identity, conversationId, { reason } = {}) {
+  if (!['customer', 'guest'].includes(identity?.role)) {
+    throw new ChatError('Only the customer can request cancellation.', 403, 'FORBIDDEN');
+  }
+  const conversation = await getConversation(identity, conversationId);
+  if (!canRequestOrderCancellation(conversation.orderStatus)) {
+    if (['Processing', 'Pending'].includes(conversation.orderStatus)) {
+      throw new ChatError('Cancel this unconfirmed order directly from its tracking page.', 409, 'DIRECT_CANCELLATION_AVAILABLE');
+    }
+    throw new ChatError('Cancellation can only be requested before the order is dispatched.', 409, 'CANCELLATION_CLOSED');
+  }
+  if (conversation.cancellationRequest?.status) {
+    throw new ChatError('A cancellation request has already been recorded for this order.', 409, 'CANCELLATION_ALREADY_REQUESTED');
+  }
+
+  const now = new Date();
+  const cancellationRequest = {
+    status: 'pending',
+    reason: normalizeCancellationReason(reason),
+    requestedByType: identity.role,
+    requestedById: identity.role === 'customer' ? String(conversation.customerId) : `guest:${conversation.orderId}`,
+    requestedAt: now,
+    reviewedBy: '',
+    reviewedAt: null,
+    response: '',
+  };
+  const updated = await ChatConversation.findOneAndUpdate(
+    { _id: conversation._id, cancellationRequest: null, orderStatus: { $in: ['Confirmed', 'Packed'] } },
+    {
+      $set: {
+        cancellationRequest,
+        lastMessageAt: now,
+        lastMessagePreview: 'Customer requested order cancellation',
+      },
+      $inc: { pharmacyUnreadCount: 1 },
+    },
+    { new: true },
+  );
+  if (!updated) {
+    throw new ChatError('A cancellation request has already been recorded or the order status changed.', 409, 'CANCELLATION_CONFLICT');
+  }
+  return conversationView(updated);
+}
+
+export async function respondToCancellationRequest(identity, conversationId, { decision, response } = {}) {
+  if (identity?.role !== 'pharmacy') {
+    throw new ChatError('Only the pharmacy can review a cancellation request.', 403, 'FORBIDDEN');
+  }
+  const normalizedDecision = String(decision || '').toLowerCase();
+  if (!['approve', 'reject'].includes(normalizedDecision)) {
+    throw new ChatError('Choose whether to approve or reject the cancellation request.', 400, 'INVALID_DECISION');
+  }
+  const normalizedResponse = Array.from(String(response || ''))
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127 ? ' ' : character;
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 500);
+  const conversation = await getConversation(identity, conversationId);
+  if (conversation.cancellationRequest?.status !== 'pending') {
+    throw new ChatError('There is no pending cancellation request for this order.', 409, 'NO_PENDING_CANCELLATION');
+  }
+  if (!canRequestOrderCancellation(conversation.orderStatus)) {
+    await ChatConversation.updateOne(
+      { _id: conversation._id, 'cancellationRequest.status': 'pending' },
+      { $set: {
+        'cancellationRequest.status': 'expired',
+        'cancellationRequest.reviewedAt': new Date(),
+        'cancellationRequest.response': 'The order progressed before this request was reviewed.',
+      } },
+    );
+    throw new ChatError('This order has already progressed too far to cancel.', 409, 'CANCELLATION_CLOSED');
+  }
+
+  const now = new Date();
+  if (normalizedDecision === 'approve') {
+    try {
+      await updateEntity(identity.sub, 'orders', conversation.pharmacyOrderId, { status: 'Cancelled' });
+    } catch (error) {
+      await syncConversationState(conversation);
+      throw new ChatError(error.message || 'The order could not be cancelled.', Number(error.status) || 409, 'CANCELLATION_FAILED');
+    }
+    const updated = await ChatConversation.findOneAndUpdate(
+      { _id: conversation._id, 'cancellationRequest.status': 'pending' },
+      { $set: {
+        'cancellationRequest.status': 'approved',
+        'cancellationRequest.reviewedBy': identity.sub,
+        'cancellationRequest.reviewedAt': now,
+        'cancellationRequest.response': normalizedResponse || 'Cancellation approved by the pharmacy.',
+        orderStatus: 'Cancelled',
+        status: 'read_only',
+        closedReason: 'cancelled',
+        closedAt: now,
+        lastMessageAt: now,
+        lastMessagePreview: 'Pharmacy approved the cancellation request',
+      }, $inc: { customerUnreadCount: 1 } },
+      { new: true },
+    );
+    if (!updated) throw new ChatError('This cancellation request was already reviewed.', 409, 'CANCELLATION_CONFLICT');
+    return conversationView(updated);
+  }
+
+  const updated = await ChatConversation.findOneAndUpdate(
+    { _id: conversation._id, 'cancellationRequest.status': 'pending', orderStatus: { $in: ['Confirmed', 'Packed'] } },
+    { $set: {
+      'cancellationRequest.status': 'rejected',
+      'cancellationRequest.reviewedBy': identity.sub,
+      'cancellationRequest.reviewedAt': now,
+      'cancellationRequest.response': normalizedResponse || 'The pharmacy could not approve this cancellation.',
+      lastMessageAt: now,
+      lastMessagePreview: 'Pharmacy responded to the cancellation request',
+    }, $inc: { customerUnreadCount: 1 } },
+    { new: true },
+  );
+  if (!updated) throw new ChatError('This cancellation request was already reviewed or the order status changed.', 409, 'CANCELLATION_CONFLICT');
   return conversationView(updated);
 }

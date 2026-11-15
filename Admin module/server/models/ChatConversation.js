@@ -1,5 +1,16 @@
 import mongoose from 'mongoose';
 
+const cancellationRequestSchema = new mongoose.Schema({
+  status: { type: String, enum: ['pending', 'approved', 'rejected', 'expired'], required: true },
+  reason: { type: String, required: true, maxlength: 500 },
+  requestedByType: { type: String, enum: ['customer', 'guest'], required: true },
+  requestedById: { type: String, required: true },
+  requestedAt: { type: Date, required: true },
+  reviewedBy: { type: String, default: '' },
+  reviewedAt: { type: Date, default: null },
+  response: { type: String, default: '', maxlength: 500 },
+}, { _id: false });
+
 const chatConversationSchema = new mongoose.Schema({
   marketplaceOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true, unique: true, index: true },
   orderId: { type: String, required: true, unique: true, index: true },
@@ -19,6 +30,7 @@ const chatConversationSchema = new mongoose.Schema({
   pharmacyUnreadCount: { type: Number, default: 0, min: 0 },
   customerLastReadAt: { type: Date, default: null },
   pharmacyLastReadAt: { type: Date, default: null },
+  cancellationRequest: { type: cancellationRequestSchema, default: null },
   // Null for registered customers. Guest conversations are removed by MongoDB's TTL monitor.
   expiresAt: { type: Date, default: null },
 }, { timestamps: true, collection: 'order_conversations' });

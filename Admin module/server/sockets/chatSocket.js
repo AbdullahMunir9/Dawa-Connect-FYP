@@ -5,6 +5,8 @@ import {
   markConversationRead,
   openOrderConversation,
   openPharmacyOrderConversation,
+  requestOrderCancellation,
+  respondToCancellationRequest,
   getConversation,
   sendMessage,
 } from '../services/chatService.js';
@@ -113,6 +115,24 @@ export function configureChatSocket(io) {
     socket.on('message:read', (...args) => reply(socketAck(args), async () => {
       const { conversationId } = socketPayload(args);
       const conversation = await markConversationRead(identity, conversationId);
+      io.to(conversationRoom(conversationId)).emit('conversation:updated', conversation);
+      return conversation;
+    }));
+
+    socket.on('cancellation:request', (...args) => reply(socketAck(args), async () => {
+      const { conversationId, reason } = socketPayload(args);
+      const conversation = await requestOrderCancellation(identity, conversationId, { reason });
+      io.to(conversationRoom(conversationId))
+        .to(`pharmacy:${conversation.pharmacyId}`)
+        .emit('cancellation:updated', conversation);
+      io.to(conversationRoom(conversationId)).emit('conversation:updated', conversation);
+      return conversation;
+    }));
+
+    socket.on('cancellation:respond', (...args) => reply(socketAck(args), async () => {
+      const { conversationId, decision, response } = socketPayload(args);
+      const conversation = await respondToCancellationRequest(identity, conversationId, { decision, response });
+      io.to(conversationRoom(conversationId)).emit('cancellation:updated', conversation);
       io.to(conversationRoom(conversationId)).emit('conversation:updated', conversation);
       return conversation;
     }));

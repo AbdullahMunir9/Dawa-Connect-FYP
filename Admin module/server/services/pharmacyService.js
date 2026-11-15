@@ -750,6 +750,7 @@ async function updateOrderStatus(ownerId, id, nextStatus) {
       if (!(ORDER_TRANSITIONS[order.status] || []).includes(nextStatus)) throw new Error(`Order cannot move from ${order.status} to ${nextStatus}.`);
       const now = new Date();
       const patch = { status: nextStatus, updatedAt: now };
+      if (nextStatus === 'Cancelled') patch.paymentStatus = 'Cancelled';
       if (nextStatus === 'Cancelled' && order.inventoryReserved && !order.inventoryRestocked) {
         for (const item of order.items || []) {
           if (!ObjectId.isValid(String(item.productId))) continue;
@@ -772,7 +773,7 @@ async function updateOrderStatus(ownerId, id, nextStatus) {
             stockAfter,
             source: 'marketplace',
             referenceId: order.id || String(order._id),
-            reason: 'Reserved stock restored when the pharmacy cancelled the order.',
+            reason: 'Reserved stock restored when the order was cancelled.',
             deduplicationKey: `order_cancelled:${order.id || order._id}:${item.productId}`,
             createdAt: now,
           }, { session });
@@ -791,6 +792,7 @@ async function updateOrderStatus(ownerId, id, nextStatus) {
             'fulfillments.$[fulfillment].status': nextStatus,
             'fulfillments.$[fulfillment].updatedAt': now,
             status: nextStatus,
+            ...(nextStatus === 'Cancelled' ? { paymentStatus: 'Cancelled' } : {}),
             updatedAt: now,
           } },
           { arrayFilters: [{ 'fulfillment.pharmacyOrderId': order.id }], session },

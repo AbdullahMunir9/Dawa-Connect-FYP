@@ -28,6 +28,7 @@ export default function ChatPage({ chatNavigation }) {
   const [openImage, setOpenImage] = useState(null)
   const [connection, setConnection] = useState('connecting')
   const [error, setError] = useState('')
+  const [reviewingCancellation, setReviewingCancellation] = useState(false)
   const messagesRef = useRef(null)
   const activeIdRef = useRef('')
   const handledNavigationRef = useRef(0)
@@ -67,6 +68,10 @@ export default function ChatPage({ chatNavigation }) {
         }
       }
       if (type === 'conversation:updated') {
+        setConversations((current) => current.map((item) => item.id === data?.id ? { ...item, ...data } : item))
+        void loadConversations().catch(() => {})
+      }
+      if (type === 'cancellation:updated') {
         setConversations((current) => current.map((item) => item.id === data?.id ? { ...item, ...data } : item))
         void loadConversations().catch(() => {})
       }
@@ -200,6 +205,34 @@ export default function ChatPage({ chatNavigation }) {
     setUploadingImages(false)
   }
 
+  const respondToCancellation = async (decision) => {
+    if (!active?.id || active.cancellationRequest?.status !== 'pending' || reviewingCancellation) return
+    let response = ''
+    if (decision === 'approve') {
+      const confirmed = window.confirm('Approve this cancellation? The order will be cancelled and all reserved items will be returned to inventory.')
+      if (!confirmed) return
+    } else {
+      const entered = window.prompt('Optional: tell the customer why this cancellation cannot be approved.', '')
+      if (entered === null) return
+      response = entered.slice(0, 500)
+    }
+    setReviewingCancellation(true)
+    setError('')
+    const result = await window.electronAPI.chat.respondCancellation({
+      conversationId: active.id,
+      decision,
+      response
+    })
+    if (result.ok) {
+      setConversations((current) => current.map((item) => item.id === active.id ? { ...item, ...result.data } : item))
+      showToast(decision === 'approve' ? 'Order cancelled and inventory restored.' : 'Cancellation request rejected.', decision === 'approve' ? 'success' : 'info')
+    } else {
+      setError(result.error || 'The cancellation request could not be reviewed.')
+      showToast(result.error || 'The cancellation request could not be reviewed.', 'error')
+    }
+    setReviewingCancellation(false)
+  }
+
   return (
     <div className="page-shell">
       <div className="page-hero">
@@ -247,6 +280,20 @@ export default function ChatPage({ chatNavigation }) {
                 <div><strong>{active.customerName}</strong><div style={{ marginTop: 3, fontSize: 12, color: '#64748b' }}>Order #{active.orderId} · {active.orderStatus}</div></div>
                 <span className={`badge ${active.canSend ? 'badge-success' : 'badge-gray'}`}>{active.canSend ? 'Active' : 'Read only'}</span>
               </header>
+              {active.cancellationRequest && <div style={{ padding: 16, borderBottom: '1px solid #e2e8f0', background: active.cancellationRequest.status === 'approved' ? '#ecfdf5' : active.cancellationRequest.status === 'pending' ? '#fffbeb' : '#fef2f2' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, color: '#0f172a' }}>Cancellation request · <span style={{ textTransform: 'capitalize' }}>{active.cancellationRequest.status}</span></div>
+                    <div style={{ marginTop: 5, fontSize: 13, color: '#475569', whiteSpace: 'pre-wrap' }}>{active.cancellationRequest.reason}</div>
+                    {active.cancellationRequest.response && <div style={{ marginTop: 6, fontSize: 12, color: '#334155' }}>Response: {active.cancellationRequest.response}</div>}
+                    {active.cancellationRequest.status === 'pending' && <div style={{ marginTop: 6, fontSize: 11, color: '#92400e' }}>Approve only if the order has not been dispatched. Approval restores the reserved inventory automatically.</div>}
+                  </div>
+                  {active.cancellationRequest.status === 'pending' && <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <button className="btn btn-secondary btn-sm" type="button" disabled={reviewingCancellation} onClick={() => void respondToCancellation('reject')}>Reject</button>
+                    <button className="btn btn-primary btn-sm" type="button" disabled={reviewingCancellation} onClick={() => void respondToCancellation('approve')}>{reviewingCancellation ? 'Working…' : 'Approve & cancel'}</button>
+                  </div>}
+                </div>
+              </div>}
               <div ref={messagesRef} style={{ flex: 1, overflowY: 'auto', padding: 22, background: '#f8fafc' }}>
                 {messages.length === 0 && <div className="empty-state"><p>No messages yet.</p></div>}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

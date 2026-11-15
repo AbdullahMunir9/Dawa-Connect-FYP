@@ -80,6 +80,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     uploadImages: (payload) => ipcRenderer.invoke('chat:upload-images', payload),
     sendMessage: (payload) => ipcRenderer.invoke('chat:send-message', payload),
     markRead: (payload) => ipcRenderer.invoke('chat:mark-read', payload),
+    respondCancellation: (payload) => ipcRenderer.invoke('chat:respond-cancellation', payload),
     onEvent: (callback) => {
       const listener = (_event, payload) => callback(payload)
       ipcRenderer.on('chat:event', listener)

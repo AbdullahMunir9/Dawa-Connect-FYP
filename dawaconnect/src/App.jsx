@@ -6,7 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Inventory from './pages/Inventory';
 import Orders from './pages/Orders';
 import Analytics from './pages/Analytics';
-import { ProfilePage, ReviewsPage, ReturnsPage } from './pages/OtherPages';
+import { ProfilePage, ReviewsPage } from './pages/OtherPages';
 import { NotificationsPage } from './pages/MorePages';
 import ChatPage from './pages/Chat';
 import Complaints from './pages/Complaints';
@@ -19,7 +19,6 @@ const NAV_ITEMS = [
     { id: 'analytics', label: 'Analytics', icon: '📈' },
   ]},
   { section: 'Operations', items: [
-    { id: 'returns', label: 'Returns & Refunds', icon: '↩️' },
     { id: 'chat', label: 'Live Customer Chat', icon: '💬', badge: true },
     { id: 'complaints', label: 'Complaints', icon: '📣', badge: true },
   ]},
@@ -33,7 +32,6 @@ const NAV_ITEMS = [
 const PAGE_TITLES = {
   dashboard: 'Dashboard', orders: 'Order Management', inventory: 'Inventory Management',
   analytics: 'Sales Analytics & Reports',
-  returns: 'Returns & Refunds',
   chat: 'Live Customer Chat',
   complaints: 'Complaints & Support',
   reviews: 'Reviews & Ratings',
@@ -91,7 +89,6 @@ export default function App() {
       }} />;
       case 'inventory': return <Inventory />;
       case 'analytics': return <Analytics />;
-      case 'returns': return <ReturnsPage />;
       case 'chat': return <ChatPage chatNavigation={chatNavigation} />;
       case 'complaints': return <Complaints />;
       case 'reviews': return <ReviewsPage />;

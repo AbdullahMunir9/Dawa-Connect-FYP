@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  canRequestOrderCancellation,
   deriveOrderChatDetails,
   GUEST_CHAT_RETENTION_DAYS,
   identityCanAccessConversation,
   isGuestChatExpired,
   isChatWritableStatus,
   normalizeChatText,
+  normalizeCancellationReason,
   resolveGuestChatExpiresAt,
 } from './chatPolicy.js';
 
@@ -31,6 +33,19 @@ test('rejects legacy multi-pharmacy orders and terminal message states', () => {
   assert.equal(isChatWritableStatus('Pending'), true);
   assert.equal(isChatWritableStatus('Delivered'), false);
   assert.equal(isChatWritableStatus('Cancelled'), false);
+});
+
+test('allows cancellation requests only after confirmation and before dispatch', () => {
+  assert.equal(canRequestOrderCancellation('Processing'), false);
+  assert.equal(canRequestOrderCancellation('Pending'), false);
+  assert.equal(canRequestOrderCancellation('Confirmed'), true);
+  assert.equal(canRequestOrderCancellation('Packed'), true);
+  assert.equal(canRequestOrderCancellation('Dispatched'), false);
+  assert.equal(canRequestOrderCancellation('Delivered'), false);
+  assert.equal(canRequestOrderCancellation('Cancelled'), false);
+  assert.equal(normalizeCancellationReason('  Ordered the wrong medicine.  '), 'Ordered the wrong medicine.');
+  assert.throws(() => normalizeCancellationReason('x'));
+  assert.throws(() => normalizeCancellationReason('x'.repeat(501)));
 });
 
 test('normalizes text and enforces participant isolation', () => {

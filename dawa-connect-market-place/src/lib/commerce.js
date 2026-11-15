@@ -98,6 +98,208 @@ function normalizeDeliveryAddress(address) {
   return normalized;
 }
 
+function normalizeCancellationReason(value) {
+  return Array.from(String(value || ""))
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127 ? " " : character;
+    })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 500);
+}
+
+function marketplaceOrderView(order) {
+  if (!order) return null;
+  return {
+    ...order,
+    _id: String(order._id),
+    userId: order.userId ? String(order.userId) : null,
+    guestSessionHash: undefined,
+  };
+}
+
+/**
+ * Cancels an unconfirmed one-pharmacy marketplace order and restores every
+ * unit reserved during checkout. Customer ownership, the marketplace order,
+ * the pharmacy order and inventory are all checked and changed in one MongoDB
+ * transaction so a pharmacy confirmation racing this request cannot produce
+ * a cancelled order with missing stock.
+ */
+export async function cancelPendingCommerceOrder({ userId, guestSessionHash, orderId, reason }) {
+  const isRegisteredCustomer = mongoose.isValidObjectId(userId);
+  const isGuestCustomer = /^[a-f0-9]{64}$/.test(String(guestSessionHash || ""));
+  if (!isRegisteredCustomer && !isGuestCustomer) {
+    throw new CommerceError("A customer session is required", 401, "UNAUTHORIZED");
+  }
+
+  const normalizedOrderId = String(orderId || "").trim().slice(0, 100);
+  if (!normalizedOrderId) throw new CommerceError("Order not found", 404, "ORDER_NOT_FOUND");
+  const cancellationReason = normalizeCancellationReason(reason);
+  const permittedOwners = [];
+  if (isRegisteredCustomer) permittedOwners.push({ userId: new mongoose.Types.ObjectId(userId) });
+  if (isGuestCustomer) {
+    permittedOwners.push({
+      guestSessionHash: String(guestSessionHash),
+      guestAccessExpiresAt: { $gt: new Date() },
+    });
+  }
+  const ownerFilter = permittedOwners.length === 1 ? permittedOwners[0] : { $or: permittedOwners };
+
+  const { client, marketplaceDb, pharmacyDb } = await getCommerceDatabases();
+  const session = client.startSession();
+  let cancelledOrder;
+
+  try {
+    await session.withTransaction(async () => {
+      const orders = marketplaceDb.collection("orders");
+      const order = await orders.findOne({ orderId: normalizedOrderId, ...ownerFilter }, { session });
+      if (!order) throw new CommerceError("Order not found", 404, "ORDER_NOT_FOUND");
+      if (order.status === "Cancelled") {
+        cancelledOrder = order;
+        return;
+      }
+
+      const fulfillment = Array.isArray(order.fulfillments) && order.fulfillments.length === 1
+        ? order.fulfillments[0]
+        : null;
+      if (order.status !== "Processing" || !fulfillment || fulfillment.status !== "Pending") {
+        throw new CommerceError(
+          "The pharmacy has already confirmed this order. Request cancellation from the live chat instead.",
+          409,
+          "CANCELLATION_REQUEST_REQUIRED",
+        );
+      }
+
+      const pharmacyOrderId = String(order.pharmacyOrderId || fulfillment.pharmacyOrderId || "");
+      const pharmacyId = String(order.pharmacyId || fulfillment.pharmacyId || "");
+      const pharmacyOrders = pharmacyDb.collection("orders");
+      const pharmacyOrder = await pharmacyOrders.findOne(
+        { id: pharmacyOrderId, ownerId: pharmacyId, source: "marketplace" },
+        { session },
+      );
+      if (!pharmacyOrder) throw new CommerceError("The pharmacy order was not found", 409, "PHARMACY_ORDER_NOT_FOUND");
+      if (pharmacyOrder.status !== "Pending") {
+        throw new CommerceError(
+          "The pharmacy has already confirmed this order. Request cancellation from the live chat instead.",
+          409,
+          "CANCELLATION_REQUEST_REQUIRED",
+        );
+      }
+
+      const now = new Date();
+      const cancelledBy = order.userId ? "customer" : "guest";
+      if (pharmacyOrder.inventoryReserved && !pharmacyOrder.inventoryRestocked) {
+        for (const item of pharmacyOrder.items || []) {
+          if (!mongoose.isValidObjectId(item.productId)) continue;
+          const quantity = Number(item.qty ?? item.quantity ?? 0);
+          if (!Number.isFinite(quantity) || quantity <= 0) continue;
+          const product = await pharmacyDb.collection("products").findOneAndUpdate(
+            { _id: new mongoose.Types.ObjectId(String(item.productId)), ownerId: pharmacyId },
+            { $inc: { stock: quantity }, $set: { updatedAt: now } },
+            { session, returnDocument: "after" },
+          );
+          if (!product) continue;
+          const stockAfter = Number(product.stock || 0);
+          await pharmacyDb.collection("inventoryMovements").insertOne({
+            movementId: randomUUID(),
+            ownerId: pharmacyId,
+            productId: String(item.productId),
+            productName: String(product.name || item.name || "Medicine").slice(0, 200),
+            type: "order_cancelled",
+            quantityChange: quantity,
+            stockBefore: stockAfter - quantity,
+            stockAfter,
+            source: "marketplace",
+            referenceId: normalizedOrderId,
+            reason: "Reserved stock restored after the customer cancelled before confirmation.",
+            deduplicationKey: `order_cancelled:${normalizedOrderId}:${item.productId}`,
+            createdAt: now,
+          }, { session });
+        }
+      }
+
+      const pharmacyUpdate = await pharmacyOrders.updateOne(
+        { _id: pharmacyOrder._id, status: "Pending" },
+        { $set: {
+          status: "Cancelled",
+          inventoryRestocked: true,
+          inventoryRestockedAt: now,
+          cancellationReason,
+          cancelledBy,
+          cancelledAt: now,
+          updatedAt: now,
+        } },
+        { session },
+      );
+      if (pharmacyUpdate.modifiedCount !== 1) {
+        throw new CommerceError(
+          "The pharmacy has already confirmed this order. Request cancellation from the live chat instead.",
+          409,
+          "CANCELLATION_REQUEST_REQUIRED",
+        );
+      }
+
+      const marketplaceUpdate = await orders.updateOne(
+        { _id: order._id, status: "Processing", "fulfillments.0.status": "Pending" },
+        { $set: {
+          status: "Cancelled",
+          paymentStatus: "Cancelled",
+          "fulfillments.0.status": "Cancelled",
+          "fulfillments.0.updatedAt": now,
+          cancellationReason,
+          cancelledBy,
+          cancelledAt: now,
+          updatedAt: now,
+        } },
+        { session },
+      );
+      if (marketplaceUpdate.modifiedCount !== 1) {
+        throw new CommerceError(
+          "The pharmacy has already confirmed this order. Request cancellation from the live chat instead.",
+          409,
+          "CANCELLATION_REQUEST_REQUIRED",
+        );
+      }
+
+      await marketplaceDb.collection("order_conversations").updateOne(
+        { marketplaceOrderId: order._id },
+        { $set: {
+          orderStatus: "Cancelled",
+          status: "read_only",
+          closedReason: "cancelled",
+          closedAt: now,
+          updatedAt: now,
+        } },
+        { session },
+      );
+
+      await pharmacyDb.collection("notifications").insertOne({
+        ownerId: pharmacyId,
+        type: "order",
+        message: `Customer cancelled marketplace order ${pharmacyOrderId} before confirmation`,
+        orderId: pharmacyOrderId,
+        read: false,
+        color: "#ef4444",
+        createdAt: now,
+        updatedAt: now,
+      }, { session });
+
+      cancelledOrder = await orders.findOne({ _id: order._id }, { session });
+    }, {
+      readPreference: "primary",
+      readConcern: { level: "snapshot" },
+      writeConcern: { w: "majority" },
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  if (!cancelledOrder) throw new CommerceError("Order cancellation did not complete", 500, "CANCELLATION_FAILED");
+  return marketplaceOrderView(cancelledOrder);
+}
+
 export async function createCommerceOrder({
   userId,
   guestSessionHash,
@@ -406,10 +608,5 @@ export async function createCommerceOrder({
   }
 
   if (!createdOrder) throw new CommerceError("Order creation did not complete", 500, "ORDER_NOT_CREATED");
-  return {
-    ...createdOrder,
-    _id: String(createdOrder._id),
-    userId: createdOrder.userId ? String(createdOrder.userId) : null,
-    guestSessionHash: undefined,
-  };
+  return marketplaceOrderView(createdOrder);
 }

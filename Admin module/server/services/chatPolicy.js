@@ -8,10 +8,20 @@ export const CHAT_ACTIVE_ORDER_STATUSES = new Set([
 
 export const GUEST_CHAT_RETENTION_DAYS = 15;
 export const GUEST_CHAT_RETENTION_MS = GUEST_CHAT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+export const CANCELLATION_REQUEST_ORDER_STATUSES = new Set(['Confirmed', 'Packed']);
 
 function validDate(value) {
   const date = value instanceof Date ? value : new Date(value);
   return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function withoutUnsafeControlCharacters(value) {
+  return Array.from(String(value || ''))
+    .filter((character) => {
+      const code = character.charCodeAt(0);
+      return code === 9 || code === 10 || code >= 32 && code !== 127;
+    })
+    .join('');
 }
 
 export function resolveGuestChatExpiresAt(order) {
@@ -30,6 +40,23 @@ export function isGuestChatExpired(order, now = new Date()) {
 
 export function isChatWritableStatus(status) {
   return CHAT_ACTIVE_ORDER_STATUSES.has(String(status || ''));
+}
+
+export function canRequestOrderCancellation(status) {
+  return CANCELLATION_REQUEST_ORDER_STATUSES.has(String(status || ''));
+}
+
+export function normalizeCancellationReason(value) {
+  const reason = withoutUnsafeControlCharacters(value)
+    .replace(/\r\n?/g, '\n')
+    .trim();
+  if (reason.length < 3) {
+    throw Object.assign(new Error('Briefly explain why you want to cancel this order.'), { status: 400 });
+  }
+  if (reason.length > 500) {
+    throw Object.assign(new Error('The cancellation reason cannot exceed 500 characters.'), { status: 400 });
+  }
+  return reason;
 }
 
 export function deriveOrderChatDetails(order) {
@@ -53,9 +80,8 @@ export function deriveOrderChatDetails(order) {
 }
 
 export function normalizeChatText(value) {
-  const text = String(value || '')
+  const text = withoutUnsafeControlCharacters(value)
     .replace(/\r\n?/g, '\n')
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
     .trim();
   if (!text) throw Object.assign(new Error('Write a message before sending.'), { status: 400 });
   if (text.length > 2000) throw Object.assign(new Error('Messages cannot exceed 2,000 characters.'), { status: 400 });
