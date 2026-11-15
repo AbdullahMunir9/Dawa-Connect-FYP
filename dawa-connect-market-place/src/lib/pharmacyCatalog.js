@@ -21,6 +21,9 @@ function activePharmacyFilter(extra = {}) {
 function sellableProductFilter(extra = {}) {
   const today = new Date().toISOString().slice(0, 10);
   return {
+    // A pharmacy may save a catalogue item before pricing it, but an unpriced
+    // inventory record must never be exposed as a free marketplace product.
+    price: { $gt: 0 },
     ...extra,
     $or: [
       { expiry: { $exists: false } },
@@ -93,6 +96,7 @@ function buildPharmacyView(user, profile, productCount = 0, ratingSummary) {
 
 function buildProductView(product, pharmacy) {
   const id = idString(product._id);
+  const imageUrl = product.imageUrl || product.image?.secureUrl || product.catalogSnapshot?.image?.secureUrl || "";
   return {
     id,
     productId: id,
@@ -106,7 +110,13 @@ function buildProductView(product, pharmacy) {
     batch: product.batch || "",
     supplier: product.supplier || "",
     unit: product.unit || "",
-    image: product.image || "💊",
+    image: imageUrl || (typeof product.image === "string" ? product.image : "💊"),
+    imageUrl,
+    genericName: product.genericName || product.catalogSnapshot?.genericName || "",
+    strength: product.catalogSnapshot?.strength || "",
+    dosageForm: product.catalogSnapshot?.dosageForm || "",
+    manufacturer: product.catalogSnapshot?.manufacturer || "",
+    packSize: product.catalogSnapshot?.packSize || "",
     pharmacyId: pharmacy.id,
     pharmacyName: pharmacy.name,
     pharmacyCity: pharmacy.city,
@@ -290,7 +300,7 @@ export async function searchPharmacyCatalog({
   }
 
   const normalizedQuery = String(query || "").trim();
-  const priceFilter = { $gte: Math.max(0, Number(minPrice) || 0) };
+  const priceFilter = { $gte: Math.max(0.01, Number(minPrice) || 0) };
   if (Number.isFinite(Number(maxPrice))) priceFilter.$lte = Number(maxPrice);
   const productFilter = sellableProductFilter({
     ownerId: { $in: ownerIds },
@@ -300,7 +310,11 @@ export async function searchPharmacyCatalog({
   if (normalizedQuery) {
     const escaped = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const matcher = new RegExp(escaped, "i");
-    productFilter.$and = [{ $or: [{ name: matcher }, { category: matcher }, { supplier: matcher }] }];
+    productFilter.$and = [{ $or: [
+      { name: matcher }, { genericName: matcher }, { category: matcher }, { supplier: matcher },
+      { "catalogSnapshot.displayName": matcher }, { "catalogSnapshot.genericName": matcher },
+      { "catalogSnapshot.manufacturer": matcher },
+    ] }];
   }
 
   let products = await pharmacyDb.collection("products").find(productFilter).toArray();

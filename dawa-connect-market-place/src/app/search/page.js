@@ -10,6 +10,7 @@ import { getClientSessionId } from "@/lib/clientSession";
 import VoiceMedicineSearchButton from "@/components/VoiceMedicineSearchButton";
 import SearchDeliveryLocation from "@/components/SearchDeliveryLocation";
 import FavouriteButton from "@/components/FavouriteButton";
+import ProductVisual from "@/components/ProductVisual";
 import { readDeliveryLocation, saveDeliveryLocation } from "@/lib/deliveryLocation";
 
 const emptyPagination = { page: 1, totalPages: 1, total: 0, startIndex: 0, endIndex: 0 };
@@ -517,7 +518,7 @@ function SearchResultsGridInner() {
             {results.map((item) => (
               <div key={item.id} className={`bg-white border rounded-xl p-4 flex flex-col md:flex-row gap-6 hover:shadow-sm transition-shadow ${item.deliveryStatus === "delivers" ? "border-emerald-200" : item.deliveryStatus === "closed" || item.deliveryStatus === "outside-radius" ? "border-amber-200" : "border-gray-200"}`}>
                 <div className="w-full md:w-32 h-32 bg-blue-50 rounded-lg flex items-center justify-center shrink-0 text-5xl">
-                  {item.image || "💊"}
+                  <ProductVisual image={item.image} name={item.name} />
                 </div>
 
                 <div className="flex-grow flex flex-col justify-center">

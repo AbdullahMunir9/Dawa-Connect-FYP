@@ -11,6 +11,7 @@ import { useCart } from "@/context/CartContext";
 import { recordSearchAndNavigate } from "@/lib/searchNavigation";
 import VoiceMedicineSearchButton from "@/components/VoiceMedicineSearchButton";
 import FavouriteButton from "@/components/FavouriteButton";
+import ProductVisual from "@/components/ProductVisual";
 import { Card, SectionHeader, Pill, StatusPill, Skeleton, EmptyState, initials, formatDate, cn } from "@/components/ui";
 
 const QUICK_ACTIONS = [
@@ -27,7 +28,7 @@ function ProductCard({ product, onAdd }) {
   return (
     <article className="group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-900/5">
       <Link href={`/product/${product.id}`} className="relative block bg-gradient-to-br from-blue-50 via-white to-teal-50 p-6" aria-label={`View ${product.name}`}>
-        <div className="grid h-28 place-items-center text-6xl transition-transform duration-300 group-hover:scale-110">{product.image || "💊"}</div>
+        <div className="grid h-28 place-items-center text-6xl transition-transform duration-300 group-hover:scale-110"><ProductVisual image={product.image} name={product.name} /></div>
         <span className={cn("absolute left-4 top-4 rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ring-inset", available ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-gray-100 text-gray-600 ring-gray-200")}>
           {available ? `In stock · ${product.stock}` : "Out of stock"}
         </span>

@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   products: {
     list: (payload) => ipcRenderer.invoke('products:list', payload),
+    searchCatalog: (payload) => ipcRenderer.invoke('products:catalog-search', payload),
     create: (payload) => ipcRenderer.invoke('products:create', payload),
     update: (payload) => ipcRenderer.invoke('products:update', payload),
     remove: (payload) => ipcRenderer.invoke('products:remove', payload)

@@ -3,7 +3,8 @@ import { useApp } from '../context/AppContext';
 
 const CATEGORIES = [
   ['order', 'Order problem'], ['delivery', 'Delivery'], ['product', 'Product / stock'], ['payment', 'Payment / settlement'],
-  ['service', 'Customer behaviour'], ['platform', 'App or platform issue'], ['account', 'My account / approval'], ['other', 'Something else'],
+  ['service', 'Customer behaviour'], ['platform', 'App or platform issue'], ['account', 'My account / approval'],
+  ['catalog_data', 'Request a catalogue product'], ['catalog_image', 'Request a product image'], ['other', 'Something else'],
 ];
 const STATUS_LABEL = { open: 'Open', in_review: 'In review', resolved: 'Resolved', dismissed: 'Closed' };
 const STATUS_BADGE = { open: 'badge-warning', in_review: 'badge-info', resolved: 'badge-success', dismissed: 'badge-gray' };
@@ -115,8 +116,30 @@ function Thread({ complaint, canManage, onBack, onReply, onStatus }) {
   );
 }
 
-function NewComplaint({ orders, onCancel, onSubmit }) {
-  const [form, setForm] = useState({ category: 'platform', priority: 'medium', orderId: '', subject: '', description: '' });
+const REQUEST_COPY = {
+  catalog_data: {
+    title: 'Request a catalogue product',
+    notice: 'Send the brand name, generic name, category, unit, strength and manufacturer if known. You can still add the product to inventory manually while DawaConnect reviews this request.',
+    subject: 'Add a product to the shared catalogue',
+    details: 'Product/brand name:\nGeneric name (if known):\nCategory:\nUnit:\nStrength or size:\nManufacturer:\nAny DRAP or product reference:',
+  },
+  catalog_image: {
+    title: 'Request a product image',
+    notice: 'Tell DawaConnect exactly which product needs an image. Continue using the generic product image until a verified shared image is approved.',
+    subject: 'Add an image to the shared product catalogue',
+    details: 'Product/brand name:\nGeneric name (if known):\nStrength or size:\nManufacturer:\nPack description:\nLink or source for the correct image (if known):',
+  },
+};
+
+function NewComplaint({ orders, initialCategory = 'platform', onCancel, onSubmit }) {
+  const requestCopy = REQUEST_COPY[initialCategory];
+  const [form, setForm] = useState({
+    category: initialCategory,
+    priority: 'medium',
+    orderId: '',
+    subject: requestCopy?.subject || '',
+    description: requestCopy?.details || '',
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -134,9 +157,9 @@ function NewComplaint({ orders, onCancel, onSubmit }) {
 
   return (
     <div className="card">
-      <div className="card-header"><span className="card-title">Contact DawaConnect</span><button className="btn btn-outline btn-xs" onClick={onCancel}>Cancel</button></div>
+      <div className="card-header"><span className="card-title">{requestCopy?.title || 'Contact DawaConnect'}</span><button className="btn btn-outline btn-xs" onClick={onCancel}>Cancel</button></div>
       <form onSubmit={submit} className="card-body">
-        <div className="alert alert-info" style={{ marginBottom: 14 }}>Use this for payment settlements, customers behaving unfairly, approval or account problems, or bugs in the app. DawaConnect replies here and you get a notification.</div>
+        <div className="alert alert-info" style={{ marginBottom: 14 }}>{requestCopy?.notice || 'Use this for payment settlements, customers behaving unfairly, approval or account problems, or bugs in the app. DawaConnect replies here and you get a notification.'}</div>
         <div className="form-row-3">
           <div className="form-group">
             <label className="form-label">Category</label>
@@ -179,6 +202,7 @@ export default function Complaints() {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [composing, setComposing] = useState(false);
+  const [composeCategory, setComposeCategory] = useState('platform');
 
   const list = tab === 'inbox' ? complaints.inbox : complaints.outbox;
   const selected = [...complaints.inbox, ...complaints.outbox].find((c) => c.id === selectedId) || null;
@@ -187,7 +211,12 @@ export default function Complaints() {
   const openInbox = complaints.inbox.filter((c) => !CLOSED.includes(c.status)).length;
   const openOutbox = complaints.outbox.filter((c) => !CLOSED.includes(c.status)).length;
 
-  if (composing) return <NewComplaint orders={orders} onCancel={() => setComposing(false)} onSubmit={async (form) => { const r = await fileComplaint(form); if (r.ok) { setComposing(false); setTab('outbox'); setSelectedId(r.data.id); } return r; }} />;
+  const startRequest = (category) => {
+    setComposeCategory(category);
+    setComposing(true);
+  };
+
+  if (composing) return <NewComplaint orders={orders} initialCategory={composeCategory} onCancel={() => setComposing(false)} onSubmit={async (form) => { const r = await fileComplaint(form); if (r.ok) { setComposing(false); setTab('outbox'); setSelectedId(r.data.id); } return r; }} />;
   if (selected) return <Thread complaint={selected} canManage={selected.target === 'pharmacy'} onBack={() => setSelectedId(null)} onReply={replyToComplaint} onStatus={setComplaintStatus} />;
 
   return (
@@ -219,7 +248,11 @@ export default function Complaints() {
           <select className="form-control" style={{ width: 140 }} value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="active">Open</option><option value="closed">Closed</option><option value="all">All</option>
           </select>
-          <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setComposing(true)}>+ Contact DawaConnect</button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => startRequest('catalog_data')}>+ Request catalogue product</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => startRequest('catalog_image')}>+ Request product image</button>
+            <button className="btn btn-primary btn-sm" onClick={() => startRequest('platform')}>+ Contact DawaConnect</button>
+          </div>
         </div>
 
         <div className="table-wrapper">

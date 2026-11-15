@@ -1,12 +1,12 @@
 # DawaConnect Central Medicine Catalogue and Shared Product Images
 
-**Status:** On hold — documented for future implementation  
+**Status:** Core catalogue, import pipeline, Pharmacy selection flow, and Marketplace shared-image rendering implemented on 15 November 2026. Initial production data and authorized product images still need to be curated and imported.
 **Document date:** 21 October 2026  
 **Affected modules:** Pharmacy desktop application, Admin module/backend, Marketplace
 
 ## 1. Purpose of this document
 
-This document records the proposed solution for standardizing medicine names and product images across DawaConnect. The feature is intentionally not being implemented yet. It is documented so development can resume later without losing the requirements, architectural decisions, risks, or implementation plan.
+This document records the architecture and the original requirement. The working implementation now lives in the Admin backend, Pharmacy desktop app, and Marketplace; the remaining operational task is curating and importing the first production catalogue.
 
 ## 2. Original requirement
 
@@ -21,11 +21,12 @@ At present, every pharmacy adds medicines to its inventory separately. Pharmacy 
 
 The required experience is:
 
-1. DawaConnect maintains a standard catalogue of medicines.
-2. A pharmacy searches and selects a medicine from that catalogue.
-3. The medicine's public name, strength, form, manufacturer, pack information, and image come from the central catalogue.
-4. The pharmacy enters only information that belongs to its own inventory, such as price, stock, batch, expiry date, and supplier.
-5. Marketplace customers see the same standard name and image regardless of which pharmacy is selling the item.
+1. DawaConnect maintains a standard catalogue of common medicines and reusable product images.
+2. A pharmacy may select a catalogue suggestion to auto-fill brand/name, generic name, category, unit and image.
+3. Catalogue selection is optional. A pharmacy may add a custom medicine or general pharmacy product, such as Pampers, even when no catalogue record exists.
+4. Shared image selection is independent of metadata selection. A custom product may reuse a suitable catalogue image; if none exists, the neutral DawaConnect product image is used.
+5. The pharmacy controls its own name, generic name, category, unit, price, stock, threshold and expiry. Supplier and batch are not collected in this version.
+6. Missing catalogue data or images can be requested from the Pharmacy Complaints page.
 
 ## 3. Current project behaviour
 
@@ -311,7 +312,7 @@ A unique index should prevent the same pharmacy from accidentally creating dupli
 
 ## 10. Pharmacy application experience
 
-The existing free-text medicine field should eventually be replaced with catalogue autocomplete.
+The existing free-text product field is enhanced with optional catalogue autocomplete. It is not replaced or locked.
 
 Proposed flow:
 
@@ -319,10 +320,11 @@ Proposed flow:
 2. Pharmacy searches by brand, generic name, strength, manufacturer, registration number, or barcode.
 3. The backend searches the central catalogue.
 4. Results show enough information to distinguish exact products, including image, strength, form, pack size, and manufacturer.
-5. Pharmacy selects the exact item.
-6. Catalogue-controlled information becomes read-only.
-7. Pharmacy enters price, stock, threshold, batch, expiry, supplier, and optional internal SKU.
-8. The inventory record stores `medicineId` rather than a manually entered public identity.
+5. Pharmacy either selects a matching item or continues with its custom product name.
+6. A selection fills brand/name, generic, category and unit, but the inventory fields remain editable.
+7. Pharmacy can independently search the shared image catalogue or choose the neutral fallback image.
+8. Pharmacy optionally enters price, stock, threshold and expiry.
+9. The inventory record stores nullable catalogue-data and catalogue-image references. Custom products keep both references empty.
 
 Example result:
 
@@ -334,7 +336,7 @@ Example result:
 
 ### Missing medicine workflow
 
-If a medicine cannot be found, the pharmacy should use **Request a medicine** rather than creating a public free-text record.
+If a medicine or non-medicine product cannot be found, the pharmacy can still create it immediately as a custom product. It may also use **Request catalogue product** or **Request product image** in Complaints so DawaConnect can improve the shared catalogue.
 
 A request could contain:
 
@@ -380,7 +382,7 @@ POST /pharmacy/products
 PUT  /pharmacy/products/:productId
 ```
 
-New product creation should eventually require `medicineId`. The server must load the catalogue record itself and must not trust catalogue names or image URLs sent by the pharmacy client.
+New product creation does not require a catalogue id. When a catalogue-data or catalogue-image id is supplied, the server loads that record itself and never trusts names or image URLs sent by the pharmacy client.
 
 ### Admin-facing
 
@@ -398,7 +400,7 @@ POST   /admin/medicine-requests/:requestId/reject
 
 ### Marketplace-facing
 
-Marketplace product queries should join or resolve each pharmacy product through `medicineId`. Search should consider catalogue names and aliases but return the exact pharmacy inventory availability and price.
+Marketplace product queries support both linked catalogue products and unlinked custom products. Search considers the pharmacy's editable name/generic/category plus catalogue snapshots and returns the exact pharmacy inventory availability and price.
 
 ## 13. Marketplace behaviour
 
@@ -435,7 +437,7 @@ Catalogue search should support:
 - DRAP registration number
 - GTIN/barcode when available
 
-Normalization should handle capitalization, whitespace, punctuation, and common abbreviations. Fuzzy matching can suggest likely records, but the pharmacy must select the exact medicine; the system must not silently choose one.
+Normalization should handle capitalization, whitespace, punctuation, and common abbreviations. Fuzzy matching only suggests likely records; the system never silently selects one, and the pharmacy can continue without selecting any result.
 
 MongoDB Atlas Search autocomplete can be evaluated when the catalogue becomes large. A simpler indexed search may be sufficient for the first version.
 
@@ -452,8 +454,8 @@ Recommended migration:
 5. Use normalized names only to create suggestions.
 6. Require admin confirmation before assigning `medicineId`.
 7. Let Marketplace temporarily fall back to legacy `name` and `image` fields when `medicineId` is absent.
-8. Require `medicineId` for all newly created products once the catalogue workflow is stable.
-9. Remove the legacy fallback only after all active products have been reviewed.
+8. Keep catalogue references nullable so new and existing custom products continue to work.
+9. Keep the neutral visual fallback permanently for products without an approved shared image.
 
 This staged migration avoids breaking existing inventory and marketplace orders.
 
@@ -524,13 +526,13 @@ A catalogue image should not be copied into every inventory record. If a histori
 
 The feature can be considered complete when:
 
-- A pharmacy cannot publish an arbitrary medicine name as a new marketplace identity.
-- A pharmacy can quickly search and select an exact catalogue product.
-- Pharmacy inventory stores a valid `medicineId`.
+- A pharmacy can quickly search and select an exact catalogue product or create a custom medicine/general pharmacy product.
+- Selecting catalogue data auto-fills brand/name, generic, category and unit without making the inventory form read-only.
+- Pharmacy inventory stores nullable, independently selected catalogue-data and catalogue-image references.
 - The same catalogue item displays the same name and image for every pharmacy.
 - Price comparison groups only truly identical catalogue items.
 - Images are stored once in Cloudinary rather than duplicated per pharmacy.
-- A missing catalogue item follows an admin approval workflow.
+- A missing catalogue item can be sold with the neutral fallback and optionally requested through Complaints.
 - Existing products continue working during migration.
 - Admins can verify, approve, retire, and audit catalogue items.
 - No backend secrets are exposed to the Electron application or Marketplace browser.
@@ -548,6 +550,6 @@ The feature can be considered complete when:
 
 ## 21. Final recommendation
 
-When work resumes, implement a DawaConnect-owned central catalogue backed primarily by verified DRAP product information. Use RxNorm only for supplementary generic normalization, and use DailyMed media only for exact matches where usage and product identity are suitable. Store one approved image per exact catalogue product in Cloudinary and make every pharmacy inventory entry reference that catalogue item.
+Maintain a DawaConnect-owned optional catalogue backed primarily by verified DRAP product information. Use RxNorm only for supplementary generic normalization, and use DailyMed media only for exact matches where usage and product identity are suitable. Store one approved image per exact catalogue product in Cloudinary, while continuing to support custom products and the neutral fallback when catalogue data or an image is unavailable.
 
 This architecture provides consistent customer-facing medicine information, substantially improves marketplace search and price comparison, reduces duplicate work, and creates a safe foundation for future barcode and medicine-alternative features.

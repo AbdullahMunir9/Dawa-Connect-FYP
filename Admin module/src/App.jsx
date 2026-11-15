@@ -15,6 +15,7 @@ import OrdersPage from "./pages/OrdersPage";
 import ComplaintsPage from "./pages/ComplaintsPage";
 import AuditLogPage from "./pages/AuditLogPage";
 import AdminsPage from "./pages/AdminsPage";
+import MedicineCatalogPage from "./pages/MedicineCatalogPage";
 
 function SplashScreen() {
   return (
@@ -58,6 +59,7 @@ export default function App() {
                   <Route path="approvals" element={<ApprovalsPage />} />
                   <Route path="customers" element={<CustomersPage />} />
                   <Route path="audit" element={<AuditLogPage />} />
+                  <Route path="medicine-catalog" element={<MedicineCatalogPage />} />
                   <Route path="admins" element={<AdminsPage />} />
                   <Route path="*" element={<NotFound />} />
                 </Route>

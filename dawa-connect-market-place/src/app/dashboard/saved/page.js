@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bookmark, Trash2, Loader2 } from "lucide-react";
 import { formatPKR } from "@/lib/currency";
 import { useFavourites } from "@/context/FavouritesContext";
+import ProductVisual from "@/components/ProductVisual";
 
 export default function SavedItems() {
   const { user } = useAuth();
@@ -33,7 +34,7 @@ export default function SavedItems() {
           {savedItems.map(item => (
             <div key={item._id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
               <div className="w-full h-32 bg-blue-50 rounded-lg mb-4 flex items-center justify-center text-4xl">
-                {item.image || "💊"}
+                <ProductVisual image={item.image} name={item.name} />
               </div>
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{item.category}</span>
               <h3 className="font-bold text-gray-900 mt-1 mb-2">{item.name}</h3>

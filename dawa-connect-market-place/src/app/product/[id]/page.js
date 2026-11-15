@@ -4,6 +4,7 @@ import { ArrowLeft, Clock, MapPin, Package, Store } from "lucide-react";
 import { getCatalogProductById } from "@/lib/pharmacyCatalog";
 import { formatPKR } from "@/lib/currency";
 import ProductPurchaseCard from "@/components/ProductPurchaseCard";
+import ProductVisual from "@/components/ProductVisual";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export default async function ProductDetails({ params }) {
         <div className="grid lg:grid-cols-[1fr_360px] gap-8">
           <section className="bg-white border border-gray-200 rounded-xl p-6 md:p-8">
             <div className="w-24 h-24 bg-blue-50 rounded-xl flex items-center justify-center text-5xl mb-6">
-              {product.image}
+              <ProductVisual image={product.image} name={product.name} />
             </div>
             <p className="text-xs uppercase tracking-wide text-blue-700 font-semibold">{product.category}</p>
             <h1 className="text-3xl font-bold text-gray-900 mt-2">{product.name}</h1>
@@ -35,12 +36,12 @@ export default async function ProductDetails({ params }) {
                 <dd className="font-semibold text-gray-900 mt-1">{product.stock} {product.unit || "units"}</dd>
               </div>
               <div className="rounded-lg border border-gray-100 p-4">
-                <dt className="text-xs uppercase text-gray-500">Supplier</dt>
-                <dd className="font-semibold text-gray-900 mt-1">{product.supplier || "Not specified"}</dd>
+                <dt className="text-xs uppercase text-gray-500">Generic name</dt>
+                <dd className="font-semibold text-gray-900 mt-1">{product.genericName || "Not specified"}</dd>
               </div>
               <div className="rounded-lg border border-gray-100 p-4">
-                <dt className="text-xs uppercase text-gray-500">Batch</dt>
-                <dd className="font-semibold text-gray-900 mt-1">{product.batch || "Not specified"}</dd>
+                <dt className="text-xs uppercase text-gray-500">Strength / form</dt>
+                <dd className="font-semibold text-gray-900 mt-1">{[product.strength, product.dosageForm].filter(Boolean).join(" · ") || "Not specified"}</dd>
               </div>
               <div className="rounded-lg border border-gray-100 p-4">
                 <dt className="text-xs uppercase text-gray-500">Expiry</dt>

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Truck, FileText, Bookmark, MessageSquareWarning, PackageCheck, ShoppingBag, ArrowRight, MapPin, Plus, Bot, Search, UploadCloud, ChevronRight, Clock3 } from "lucide-react";
 import { formatPKR } from "@/lib/currency";
 import { Card, SectionHeader, Pill, StatusPill, Skeleton, EmptyState, formatDate, relativeTime, cn } from "@/components/ui";
+import ProductVisual from "@/components/ProductVisual";
 
 const ACTIVE = ["Processing", "Confirmed", "Packed", "Dispatched"];
 
@@ -131,7 +132,7 @@ export default function DashboardOverview() {
             : (
               <ul className="grid grid-cols-3 gap-3 px-5 pb-5 sm:px-6">
                 {saved.slice(0, 3).map((item) => (
-                  <li key={item._id}><Link href={`/product/${item.productId}`} className="block rounded-xl border border-gray-200 p-3 text-center transition hover:border-blue-300 hover:shadow-sm"><span className="block text-3xl">{item.image || "💊"}</span><span className="mt-2 line-clamp-2 block text-xs font-semibold text-gray-900">{item.name}</span><span className="block text-xs text-blue-700">{formatPKR(item.price)}</span></Link></li>
+                  <li key={item._id}><Link href={`/product/${item.productId}`} className="block rounded-xl border border-gray-200 p-3 text-center transition hover:border-blue-300 hover:shadow-sm"><span className="mx-auto block h-10 w-10 text-3xl"><ProductVisual image={item.image} name={item.name} /></span><span className="mt-2 line-clamp-2 block text-xs font-semibold text-gray-900">{item.name}</span><span className="block text-xs text-blue-700">{formatPKR(item.price)}</span></Link></li>
                 ))}
               </ul>
             )}

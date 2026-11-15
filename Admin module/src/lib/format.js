@@ -92,7 +92,7 @@ export function statusTone(status) {
 
 export const PHARMACY_STATE_LABEL = { pending: "Pending review", approved: "Approved", suspended: "Suspended", rejected: "Rejected" };
 export const COMPLAINT_STATUS_LABEL = { open: "Open", in_review: "In review", resolved: "Resolved", dismissed: "Dismissed" };
-export const COMPLAINT_CATEGORY_LABEL = { order: "Order", delivery: "Delivery", product: "Product quality", payment: "Payment", service: "Service / behaviour", platform: "Platform / app", account: "Account", other: "Other" };
+export const COMPLAINT_CATEGORY_LABEL = { order: "Order", delivery: "Delivery", product: "Product quality", payment: "Payment", service: "Service / behaviour", platform: "Platform / app", account: "Account", catalog_data: "Catalogue product request", catalog_image: "Catalogue image request", other: "Other" };
 
 /* ---------- CSV export ---------- */
 

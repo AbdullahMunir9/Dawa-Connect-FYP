@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Building2, ClipboardCheck, ShoppingBag, MessageSquareWarning, ScrollText, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Users, Building2, ClipboardCheck, ShoppingBag, MessageSquareWarning, ScrollText, ShieldCheck, Pill } from "lucide-react";
 
 export const NAV = [
   { group: "Overview", items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard, end: true }] },
@@ -15,6 +15,7 @@ export const NAV = [
   {
     group: "Platform",
     items: [
+      { to: "/medicine-catalog", label: "Medicine catalogue", icon: Pill },
       { to: "/audit", label: "Audit log", icon: ScrollText },
       { to: "/admins", label: "Admins", icon: ShieldCheck, badge: "pendingAdmins", superadmin: true },
     ],

@@ -18,6 +18,7 @@ import {
   requestPasswordReset,
   resetPasswordWithOtp,
   listProducts,
+  searchMedicineCatalog,
   createProduct,
   updateProduct,
   removeProduct,
@@ -623,6 +624,15 @@ app.whenReady().then(async () => {
   ipcMain.handle('products:list', async (_event, payload) => {
     try {
       const data = await listProducts(payload?.ownerId)
+      return { ok: true, data }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('products:catalog-search', async (_event, payload) => {
+    try {
+      const data = await searchMedicineCatalog(payload?.search, payload?.limit, payload?.imagesOnly)
       return { ok: true, data }
     } catch (error) {
       return { ok: false, error: error.message }

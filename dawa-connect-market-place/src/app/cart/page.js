@@ -17,12 +17,13 @@ import {
 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { formatPKR } from "@/lib/currency";
+import ProductVisual from "@/components/ProductVisual";
 
 function ProductPreview({ item, compact = false }) {
   return (
     <div className={`flex items-center gap-3 ${compact ? "" : "sm:gap-5"}`}>
       <div className={`${compact ? "h-14 w-14 text-2xl" : "h-20 w-20 text-3xl"} flex shrink-0 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 p-2`}>
-        {item.image || "💊"}
+        <ProductVisual image={item.image} name={item.name} />
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate font-semibold text-gray-900">{item.name}</p>

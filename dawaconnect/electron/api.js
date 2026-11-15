@@ -182,6 +182,11 @@ export function listProducts() {
   return apiRequest('/pharmacy/products');
 }
 
+export function searchMedicineCatalog(search, limit = 12, imagesOnly = false) {
+  const query = new URLSearchParams({ search: String(search || ''), limit: String(limit), imagesOnly: String(Boolean(imagesOnly)) });
+  return apiRequest(`/pharmacy/medicine-catalog?${query.toString()}`);
+}
+
 export function createProduct(_ownerId, product) {
   return apiRequest('/pharmacy/products', { method: 'POST', body: product });
 }

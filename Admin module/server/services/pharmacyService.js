@@ -4,6 +4,8 @@ import mongoose from 'mongoose';
 import pharmacyDb from '../db/pharmacyConnection.js';
 import { pharmacyView } from '../middleware/pharmacyAuth.js';
 import { insertInventoryMovement } from './inventoryMovement.js';
+import { prepareInventoryProduct, validateResolvedProductCatalogs } from './medicineCatalogCore.js';
+import { findCatalogMedicine, searchMedicineCatalog } from './medicineCatalogService.js';
 
 const { ObjectId } = mongoose.Types;
 const MARKETPLACE_DB_NAME = process.env.MARKETPLACE_DB_NAME || 'MarketPlace';
@@ -30,7 +32,7 @@ const ORDER_TRANSITIONS = {
   Delivered: [],
   Cancelled: [],
 };
-const COMPLAINT_CATEGORIES = ['order', 'delivery', 'product', 'payment', 'service', 'platform', 'account', 'other'];
+const COMPLAINT_CATEGORIES = ['order', 'delivery', 'product', 'payment', 'service', 'platform', 'account', 'catalog_data', 'catalog_image', 'other'];
 const COMPLAINT_CLOSED = ['resolved', 'dismissed'];
 const locationSessions = new Map();
 let indexesReady;
@@ -43,6 +45,10 @@ export async function pharmacyDatabase() {
       pharmacyDb.collection('users').createIndex({ phoneNormalized: 1 }, { unique: true, sparse: true }),
       pharmacyDb.collection('users').createIndex({ location: '2dsphere' }),
       pharmacyDb.collection(PRODUCTS_COLLECTION).createIndex({ ownerId: 1, name: 1 }),
+      pharmacyDb.collection(PRODUCTS_COLLECTION).createIndex({ ownerId: 1, catalogMedicineId: 1 }),
+      pharmacyDb.collection('medicineCatalog').createIndex({ catalogKey: 1 }, { unique: true }),
+      pharmacyDb.collection('medicineCatalog').createIndex({ status: 1, displayName: 1 }),
+      pharmacyDb.collection('medicineCatalog').createIndex({ searchText: 1 }),
       pharmacyDb.collection('orders').createIndex({ ownerId: 1, date: -1 }),
       pharmacyDb.collection('orders').createIndex({ marketplaceOrderId: 1, ownerId: 1 }),
       pharmacyDb.collection('orders').createIndex({ status: 1, 'deliveryAddress.city': 1, createdAt: -1 }),
@@ -621,10 +627,39 @@ export async function listProducts(ownerId) {
   return (await db.collection(PRODUCTS_COLLECTION).find({ ownerId }).sort({ createdAt: -1 }).toArray()).map(mapDoc);
 }
 
+export async function searchAvailableMedicines(query, limit, options) {
+  return searchMedicineCatalog(query, limit, options);
+}
+
+async function resolveProductCatalogs(value, existing = null) {
+  const ownsCatalogField = Object.hasOwn(value || {}, 'catalogMedicineId');
+  const ownsImageField = Object.hasOwn(value || {}, 'catalogImageId');
+  const catalogId = ownsCatalogField ? String(value.catalogMedicineId || '') : String(existing?.catalogMedicineId || '');
+  const useGenericImage = value?.useGenericImage === true;
+  const defaultImageId = String(existing?.catalogImageId || '') || catalogId;
+  const imageId = useGenericImage
+    ? ''
+    : ownsImageField
+      ? String(value.catalogImageId || '')
+      : defaultImageId;
+  const catalog = catalogId ? await findCatalogMedicine(catalogId) : null;
+  const imageCatalog = imageId ? await findCatalogMedicine(imageId) : null;
+  return validateResolvedProductCatalogs({ catalogId, catalog, imageId, imageCatalog });
+}
+
 export async function createProduct(ownerId, value) {
   const db = await pharmacyDatabase();
   const now = new Date();
-  const doc = { ...cleanObject(value), ownerId, createdAt: now, updatedAt: now };
+  const { catalog, imageCatalog } = await resolveProductCatalogs(value);
+  const product = prepareInventoryProduct(value, catalog, imageCatalog);
+  if (product.catalogMedicineId) {
+    const duplicate = await db.collection(PRODUCTS_COLLECTION).findOne({
+      ownerId,
+      catalogMedicineId: product.catalogMedicineId,
+    });
+    if (duplicate) throw Object.assign(new Error('This catalogue medicine is already in your inventory. Edit the existing item instead.'), { status: 409 });
+  }
+  const doc = { ...product, ownerId, createdAt: now, updatedAt: now };
   const session = pharmacyDb.getClient().startSession();
   let created;
   try {
@@ -656,13 +691,21 @@ export async function createProduct(ownerId, value) {
 export async function updateProduct(ownerId, id, value) {
   const db = await pharmacyDatabase();
   const _id = objectId(id, 'product');
-  const updates = cleanObject(value, ['id']);
   const session = pharmacyDb.getClient().startSession();
   let updated;
   try {
     await session.withTransaction(async () => {
       const existing = await db.collection(PRODUCTS_COLLECTION).findOne({ _id, ownerId }, { session });
       if (!existing) throw Object.assign(new Error('Product not found.'), { status: 404 });
+      const candidate = { ...existing, ...cleanObject(value, ['id']) };
+      const { catalog, imageCatalog } = await resolveProductCatalogs(value, existing);
+      const updates = prepareInventoryProduct(candidate, catalog, imageCatalog);
+      if (updates.catalogMedicineId) {
+        const duplicate = await db.collection(PRODUCTS_COLLECTION).findOne({
+          _id: { $ne: _id }, ownerId, catalogMedicineId: updates.catalogMedicineId,
+        }, { session });
+        if (duplicate) throw Object.assign(new Error('This catalogue medicine is already in your inventory.'), { status: 409 });
+      }
       updated = await db.collection(PRODUCTS_COLLECTION).findOneAndUpdate(
         { _id, ownerId },
         { $set: { ...updates, updatedAt: new Date() } },

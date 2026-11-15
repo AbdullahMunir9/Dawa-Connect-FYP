@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 // Shared complaints contract (MarketPlace.complaints). The Admin module and the
 // Pharmacy desktop app read/write the same documents – keep field names in sync.
-export const COMPLAINT_CATEGORIES = ["order", "delivery", "product", "payment", "service", "platform", "account", "other"];
+export const COMPLAINT_CATEGORIES = ["order", "delivery", "product", "payment", "service", "platform", "account", "catalog_data", "catalog_image", "other"];
 export const COMPLAINT_STATUSES = ["open", "in_review", "resolved", "dismissed"];
 export const COMPLAINT_PRIORITIES = ["low", "medium", "high"];
 

@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import { Server as SocketIOServer } from 'socket.io';
 import adminRoutes from './routes/adminRoutes.js';
+import medicineCatalogRoutes from './routes/medicineCatalogRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import complaintRoutes from './routes/complaintRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
@@ -80,6 +81,7 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+app.use('/api/admin/medicine-catalog', medicineCatalogRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/complaints', complaintRoutes);

@@ -1,0 +1,27 @@
+{
+  "medicines": [
+    {
+      "displayName": "Example Brand Paracetamol 500mg Tablets",
+      "brandName": "Example Brand",
+      "genericName": "Paracetamol",
+      "strength": "500 mg",
+      "dosageForm": "Tablet",
+      "packSize": "20 tablets",
+      "manufacturer": "Replace with verified manufacturer",
+      "category": "Analgesic",
+      "unit": "Tablets",
+      "drapRegistrationNumber": "",
+      "aliases": ["Acetaminophen"],
+      "status": "draft",
+      "source": {
+        "name": "Replace with reviewed source",
+        "url": "",
+        "reviewedAt": null,
+        "notes": "Example only. Verify every field before activation."
+      },
+      "imageFile": "",
+      "imageSourceUrl": "",
+      "imageRightsConfirmed": false
+    }
+  ]
+}

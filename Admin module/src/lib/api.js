@@ -73,6 +73,16 @@ export const AdminAPI = {
   replyComplaint: (id, text) => api.post(`/complaints/${id}/reply`, { text }).then((r) => r.data.complaint),
   updateComplaint: (id, payload) => api.patch(`/complaints/${id}`, payload).then((r) => r.data.complaint),
 
+  medicineCatalog: (params) => api.get("/admin/medicine-catalog", { params }).then((r) => r.data),
+  createMedicineCatalog: (payload) => api.post("/admin/medicine-catalog", payload).then((r) => r.data),
+  updateMedicineCatalog: (id, payload) => api.patch(`/admin/medicine-catalog/${id}`, payload).then((r) => r.data),
+  uploadMedicineCatalogImage: (id, file, { sourceUrl = "", rightsConfirmed = false } = {}) => api.post(
+    `/admin/medicine-catalog/${id}/image`,
+    file,
+    { headers: { "Content-Type": file.type, "x-image-source-url": sourceUrl, "x-image-rights-confirmed": String(rightsConfirmed) } },
+  ).then((r) => r.data),
+  removeMedicineCatalogImage: (id) => api.delete(`/admin/medicine-catalog/${id}/image`).then((r) => r.data),
+
   audit: (params) => api.get("/audit", { params }).then((r) => r.data),
   health: () => api.get("/health").then((r) => r.data),
 };

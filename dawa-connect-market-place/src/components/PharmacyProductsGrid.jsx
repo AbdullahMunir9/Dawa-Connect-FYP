@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import { formatPKR } from "@/lib/currency";
 import FavouriteButton from "@/components/FavouriteButton";
+import ProductVisual from "@/components/ProductVisual";
 
 export default function PharmacyProductsGrid({ pharmacy }) {
   const { addToCart } = useCart();
@@ -28,7 +29,7 @@ export default function PharmacyProductsGrid({ pharmacy }) {
             className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-sm transition-shadow"
           >
             <div className="h-24 bg-blue-50 rounded-lg flex items-center justify-center text-4xl mb-4">
-              {product.image}
+              <ProductVisual image={product.image} name={product.name} />
             </div>
             <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">{product.category}</p>
             <Link href={`/product/${product.id}`} className="block text-lg font-semibold text-gray-900 hover:text-blue-700 mb-2">

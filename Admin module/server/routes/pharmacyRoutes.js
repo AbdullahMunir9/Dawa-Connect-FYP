@@ -4,7 +4,7 @@ import {
   confirmPharmacyLocation, createComplaint, createEntity, createProduct, deleteEntity, deleteProduct,
   getProfile, listComplaints, listEntity, listProducts, locationConfigured, loginPharmacy, logoutPharmacy,
   registrationAvailability, registerPharmacy, resendRegistrationOtp, replyComplaint, requestPasswordReset, resetPassword,
-  searchPharmacyLocation, updateComplaintStatus, updateEntity, updateProduct, updateProfile, markAllNotificationsRead,
+  searchAvailableMedicines, searchPharmacyLocation, updateComplaintStatus, updateEntity, updateProduct, updateProfile, markAllNotificationsRead,
   verifyPharmacyRegistration,
 } from '../services/pharmacyService.js';
 import { removeProfilePhoto, uploadProfilePhoto, uploadRegistrationPhoto } from '../services/pharmacyPhotoService.js';
@@ -49,6 +49,11 @@ router.use(requirePharmacyAuth);
 router.get('/auth/me', (req, res) => res.json(pharmacyView(req.pharmacyAuth.pharmacy)));
 router.post('/auth/logout', asyncRoute(async (req) => logoutPharmacy(req.pharmacyAuth.token)));
 
+router.get('/medicine-catalog', asyncRoute(async (req) => searchAvailableMedicines(
+  req.query?.search,
+  req.query?.limit,
+  { imagesOnly: String(req.query?.imagesOnly || '').toLowerCase() === 'true' },
+)));
 router.get('/products', asyncRoute(async (req) => listProducts(req.pharmacyAuth.ownerId)));
 router.post('/products', asyncRoute(async (req) => createProduct(req.pharmacyAuth.ownerId, req.body)));
 router.patch('/products/:id', asyncRoute(async (req) => updateProduct(req.pharmacyAuth.ownerId, req.params.id, req.body)));

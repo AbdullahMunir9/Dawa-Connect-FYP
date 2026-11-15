@@ -9,6 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { formatPKR } from "@/lib/currency";
 import { readDeliveryLocation } from "@/lib/deliveryLocation";
 import SearchDeliveryLocation from "@/components/SearchDeliveryLocation";
+import ProductVisual from "@/components/ProductVisual";
 
 const emptyManualAddress = {
   label: "Home",
@@ -444,7 +445,7 @@ function CheckoutContent() {
                 checkoutItems.map((item) => (
                   <div key={item.cartItemId} className="flex items-center gap-4">
                     <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center shrink-0 text-2xl">
-                      {item.image || "💊"}
+                      <ProductVisual image={item.image} name={item.name} />
                     </div>
                     <div className="flex-grow">
                       <h3 className="font-semibold text-gray-900">{item.name}</h3>
