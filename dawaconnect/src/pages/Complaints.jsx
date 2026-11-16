@@ -6,8 +6,8 @@ const CATEGORIES = [
   ['service', 'Customer behaviour'], ['platform', 'App or platform issue'], ['account', 'My account / approval'],
   ['catalog_data', 'Request a catalogue product'], ['catalog_image', 'Request a product image'], ['other', 'Something else'],
 ];
-const STATUS_LABEL = { open: 'Open', in_review: 'In review', resolved: 'Resolved', dismissed: 'Closed' };
-const STATUS_BADGE = { open: 'badge-warning', in_review: 'badge-info', resolved: 'badge-success', dismissed: 'badge-gray' };
+const STATUS_LABEL = { open: 'Open', in_review: 'In review', resolution_pending: 'Awaiting confirmation', resolved: 'Resolved', dismissed: 'Closed' };
+const STATUS_BADGE = { open: 'badge-warning', in_review: 'badge-info', resolution_pending: 'badge-warning', resolved: 'badge-success', dismissed: 'badge-gray' };
 const ROLE_LABEL = { customer: 'Customer', pharmacy: 'You', admin: 'DawaConnect' };
 const CLOSED = ['resolved', 'dismissed'];
 
@@ -16,10 +16,10 @@ const fmt = (value) => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-PK', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 };
 
-function Thread({ complaint, canManage, onBack, onReply, onStatus }) {
+function Thread({ complaint, canManage, onBack, onReply, onStatus, onResolution }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const [closing, setClosing] = useState(null); // 'resolved' | 'dismissed'
+  const [closing, setClosing] = useState(null); // 'propose' | 'reject'
   const [note, setNote] = useState('');
   const closed = CLOSED.includes(complaint.status);
 
@@ -33,7 +33,7 @@ function Thread({ complaint, canManage, onBack, onReply, onStatus }) {
   };
 
   const finish = async () => {
-    const result = await onStatus(complaint.id, closing, note.trim());
+    const result = await onResolution(complaint.id, closing, note.trim());
     if (result.ok) { setClosing(null); setNote(''); }
   };
 
@@ -55,12 +55,12 @@ function Thread({ complaint, canManage, onBack, onReply, onStatus }) {
           {complaint.priority === 'high' && <span className="badge badge-danger">High priority</span>}
           {canManage && !closed && (
             <>
-              {complaint.status === 'open' && <button className="btn btn-secondary btn-sm" onClick={() => onStatus(complaint.id, 'in_review', '')}>Start review</button>}
-              <button className="btn btn-success btn-sm" onClick={() => setClosing('resolved')}>Resolve</button>
-              <button className="btn btn-outline btn-sm" onClick={() => setClosing('dismissed')}>Close</button>
+              {complaint.target === 'pharmacy' && complaint.status === 'open' && <button className="btn btn-secondary btn-sm" onClick={() => onStatus(complaint.id, 'in_review', '')}>Start review</button>}
+              {complaint.status !== 'resolution_pending' && <button className="btn btn-success btn-sm" onClick={() => setClosing('propose')}>Propose resolution</button>}
+              {complaint.status === 'resolution_pending' && (complaint.resolution?.confirmations || []).some((c) => c.by?.role === 'pharmacy') && <button className="btn btn-outline btn-sm" onClick={() => setClosing('reject')}>Resume discussion</button>}
+              {complaint.status === 'resolution_pending' && !(complaint.resolution?.confirmations || []).some((c) => c.by?.role === 'pharmacy') && <button className="btn btn-success btn-sm" onClick={() => onResolution(complaint.id, 'confirm', '')}>Confirm resolution</button>}
             </>
           )}
-          {canManage && closed && <button className="btn btn-secondary btn-sm" onClick={() => onStatus(complaint.id, 'open', '')}>Reopen</button>}
         </div>
       </div>
 
@@ -72,12 +72,12 @@ function Thread({ complaint, canManage, onBack, onReply, onStatus }) {
 
         {closing && (
           <div className="soft-panel" style={{ marginTop: 14, padding: 16, border: '1px solid #fde68a', background: '#fffbeb' }}>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{closing === 'resolved' ? 'Mark as resolved' : 'Close without action'}</div>
-            <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 8 }}>The customer will see this note. Explain what you did (refund, replacement, clarification…).</div>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{closing === 'propose' ? 'Propose a resolution' : 'Continue the discussion'}</div>
+            <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 8 }}>{closing === 'propose' ? 'The customer must confirm this outcome before the complaint is resolved.' : 'The pending resolution will be withdrawn and the complaint will return to In review.'}</div>
             <textarea className="form-control" rows={3} value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} placeholder="e.g. Replacement pack delivered on 14 Sept and the expired strip was collected." />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10 }}>
               <button className="btn btn-outline btn-sm" onClick={() => setClosing(null)}>Cancel</button>
-              <button className={`btn btn-sm ${closing === 'resolved' ? 'btn-success' : 'btn-danger'}`} disabled={note.trim().length < 5} onClick={finish}>{closing === 'resolved' ? 'Confirm resolved' : 'Confirm close'}</button>
+              <button className={`btn btn-sm ${closing === 'propose' ? 'btn-success' : 'btn-secondary'}`} disabled={note.trim().length < 5} onClick={finish}>{closing === 'propose' ? 'Send proposal' : 'Resume discussion'}</button>
             </div>
           </div>
         )}
@@ -196,7 +196,7 @@ function NewComplaint({ orders, initialCategory = 'platform', onCancel, onSubmit
 }
 
 export default function Complaints() {
-  const { complaints, orders, fileComplaint, replyToComplaint, setComplaintStatus } = useApp();
+  const { complaints, orders, fileComplaint, replyToComplaint, setComplaintStatus, actOnComplaintResolution } = useApp();
   const [tab, setTab] = useState('inbox');
   const [filter, setFilter] = useState('active');
   const [search, setSearch] = useState('');
@@ -217,7 +217,7 @@ export default function Complaints() {
   };
 
   if (composing) return <NewComplaint orders={orders} initialCategory={composeCategory} onCancel={() => setComposing(false)} onSubmit={async (form) => { const r = await fileComplaint(form); if (r.ok) { setComposing(false); setTab('outbox'); setSelectedId(r.data.id); } return r; }} />;
-  if (selected) return <Thread complaint={selected} canManage={selected.target === 'pharmacy'} onBack={() => setSelectedId(null)} onReply={replyToComplaint} onStatus={setComplaintStatus} />;
+  if (selected) return <Thread complaint={selected} canManage onBack={() => setSelectedId(null)} onReply={replyToComplaint} onStatus={setComplaintStatus} onResolution={actOnComplaintResolution} />;
 
   return (
     <div>
@@ -246,7 +246,7 @@ export default function Complaints() {
             <input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <select className="form-control" style={{ width: 140 }} value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="active">Open</option><option value="closed">Closed</option><option value="all">All</option>
+            <option value="active">Active complaints</option><option value="closed">Resolved / previous</option><option value="all">All complaints</option>
           </select>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-secondary btn-sm" onClick={() => startRequest('catalog_data')}>+ Request catalogue product</button>

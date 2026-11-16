@@ -39,7 +39,7 @@ function ComplaintDrawer({ complaintId, onClose, onChanged }) {
   const { data: complaint, loading, error, refetch, setData } = useQuery(() => AdminAPI.complaint(complaintId), [complaintId], { enabled: Boolean(complaintId) });
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
-  const [dialog, setDialog] = useState(null); // 'resolved' | 'dismissed'
+  const [dialog, setDialog] = useState(null); // 'propose' | 'reject'
   const threadEnd = useRef(null);
 
   useEffect(() => { threadEnd.current?.scrollIntoView({ block: "end" }); }, [complaint?.messages?.length]);
@@ -67,7 +67,9 @@ function ComplaintDrawer({ complaintId, onClose, onChanged }) {
   }
 
   const isInbox = complaint?.target === "admin";
+  const isOversight = complaint?.target === "pharmacy";
   const closed = ["resolved", "dismissed"].includes(complaint?.status);
+  const adminConfirmed = (complaint?.resolution?.confirmations || []).some((confirmation) => confirmation.by?.role === "admin");
   const involvedPharmacyId = complaint?.pharmacyId || (complaint?.source === "pharmacy" ? complaint?.reporter?.id : null);
 
   return (
@@ -77,32 +79,37 @@ function ComplaintDrawer({ complaintId, onClose, onChanged }) {
       subtitle={complaint && <span>Filed by <strong className="font-medium text-ink">{complaint.reporter?.name}</strong> ({ROLE_LABEL[complaint.reporter?.role]}) · {formatRelative(complaint.createdAt)}{complaint.pharmacyName && <> · about <strong className="font-medium text-ink">{complaint.pharmacyName}</strong></>}</span>}
       actions={complaint && !closed && (
         <div className="hidden items-center gap-1.5 sm:flex">
-          <Select value={complaint.priority} onChange={(e) => apply(() => AdminAPI.updateComplaint(complaintId, { priority: e.target.value }), ["Priority updated"])} className="h-8 w-28 py-0 text-xs" aria-label="Priority"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></Select>
-          {complaint.status === "open" && <Button size="sm" variant="secondary" onClick={() => apply(() => AdminAPI.updateComplaint(complaintId, { status: "in_review" }), ["Marked as in review"])}><Eye className="h-3.5 w-3.5" /> Start review</Button>}
-          <Button size="sm" variant="success" onClick={() => setDialog("resolved")}><CheckCircle2 className="h-3.5 w-3.5" /> Resolve</Button>
-          <Button size="sm" variant="ghost" onClick={() => setDialog("dismissed")}><XCircle className="h-3.5 w-3.5" /> Dismiss</Button>
+          {isInbox && <Select value={complaint.priority} onChange={(e) => apply(() => AdminAPI.updateComplaint(complaintId, { priority: e.target.value }), ["Priority updated"])} className="h-8 w-28 py-0 text-xs" aria-label="Priority"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></Select>}
+          {isInbox && complaint.status === "open" && <Button size="sm" variant="secondary" onClick={() => apply(() => AdminAPI.updateComplaint(complaintId, { status: "in_review" }), ["Marked as in review"])}><Eye className="h-3.5 w-3.5" /> Start review</Button>}
+          {isInbox && complaint.status !== "resolution_pending" && <Button size="sm" variant="success" onClick={() => setDialog("propose")}><CheckCircle2 className="h-3.5 w-3.5" /> Propose resolution</Button>}
+          {isInbox && complaint.status === "resolution_pending" && !adminConfirmed && <Button size="sm" variant="success" onClick={() => apply(() => AdminAPI.resolveComplaint(complaintId, "confirm"), ["Resolution confirmation recorded"])}>Confirm resolution</Button>}
+          {isInbox && complaint.status === "resolution_pending" && adminConfirmed && <Badge tone="warning">Waiting for customer</Badge>}
+          {isInbox && complaint.status === "resolution_pending" && <Button size="sm" variant="secondary" onClick={() => setDialog("reject")}>Continue discussion</Button>}
+          {isOversight && <Badge tone="info">Read-only oversight</Badge>}
         </div>
       )}
       footer={complaint && (closed ? (
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
           <span className="text-muted">{complaint.status === "resolved" ? "Resolved" : "Dismissed"} by {complaint.resolution?.by?.name || "DawaConnect"} · {formatRelative(complaint.resolution?.at)}</span>
-          <Button size="sm" variant="secondary" onClick={() => apply(() => AdminAPI.updateComplaint(complaintId, { status: "open" }), ["Complaint reopened"])}><RotateCcw className="h-3.5 w-3.5" /> Reopen</Button>
+          {isInbox && <Button size="sm" variant="secondary" onClick={() => apply(() => AdminAPI.updateComplaint(complaintId, { status: "open" }), ["Complaint reopened"])}><RotateCcw className="h-3.5 w-3.5" /> Reopen</Button>}
         </div>
       ) : (
-        <form onSubmit={sendReply} className="flex items-end gap-2">
+        isInbox ? <form onSubmit={sendReply} className="flex items-end gap-2">
           <Textarea rows={2} value={reply} onChange={(e) => setReply(e.target.value)} placeholder={isInbox ? `Reply to ${complaint.reporter?.name}…` : "Add a note visible to the customer and pharmacy…"} maxLength={2000} className="flex-1"
             onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") sendReply(e); }} />
           <Button type="submit" loading={sending} disabled={!reply.trim()} aria-label="Send reply"><Send className="h-4 w-4" /> Send</Button>
-        </form>
+        </form> : <p className="text-sm text-muted">Read-only oversight: the customer and pharmacy must continue this conversation and confirm any resolution themselves.</p>
       ))}>
       {error && <EmptyState title="Couldn’t load this complaint" description={error} action={<Button onClick={() => refetch()}>Retry</Button>} />}
       {complaint && (
         <div className="px-5 py-4 sm:px-6">
           {!closed && (
             <div className="mb-4 flex flex-wrap items-center gap-1.5 sm:hidden">
-              {complaint.status === "open" && <Button size="sm" variant="secondary" onClick={() => apply(() => AdminAPI.updateComplaint(complaintId, { status: "in_review" }), ["Marked as in review"])}>Start review</Button>}
-              <Button size="sm" variant="success" onClick={() => setDialog("resolved")}>Resolve</Button>
-              <Button size="sm" variant="ghost" onClick={() => setDialog("dismissed")}>Dismiss</Button>
+              {isInbox && complaint.status === "open" && <Button size="sm" variant="secondary" onClick={() => apply(() => AdminAPI.updateComplaint(complaintId, { status: "in_review" }), ["Marked as in review"])}>Start review</Button>}
+              {isInbox && complaint.status !== "resolution_pending" && <Button size="sm" variant="success" onClick={() => setDialog("propose")}>Propose resolution</Button>}
+              {isInbox && complaint.status === "resolution_pending" && !adminConfirmed && <Button size="sm" variant="success" onClick={() => apply(() => AdminAPI.resolveComplaint(complaintId, "confirm"), ["Resolution confirmation recorded"])}>Confirm resolution</Button>}
+              {isInbox && complaint.status === "resolution_pending" && <Button size="sm" variant="secondary" onClick={() => setDialog("reject")}>Continue discussion</Button>}
+              {isOversight && <p className="text-xs text-muted">Read-only oversight</p>}
             </div>
           )}
           <div className="grid gap-4 lg:grid-cols-[1fr_260px]">
@@ -145,12 +152,12 @@ function ComplaintDrawer({ complaintId, onClose, onChanged }) {
           </div>
         </div>
       )}
-      <ConfirmDialog open={dialog === "resolved"} onClose={() => setDialog(null)} tone="success" icon={CheckCircle2} confirmLabel="Mark resolved" title="Resolve this complaint?" description="The reporter is notified and the note below is added to the conversation."
+      <ConfirmDialog open={dialog === "propose"} onClose={() => setDialog(null)} tone="success" icon={CheckCircle2} confirmLabel="Send proposal" title="Propose this resolution?" description="This does not close the complaint. The reporter must confirm the outcome before it becomes resolved."
         reason={{ label: "Resolution note (sent to the reporter)", required: true, minLength: 5, placeholder: "e.g. We contacted the pharmacy and a refund was issued on 12 Sept." }}
-        onConfirm={(note) => apply(() => AdminAPI.updateComplaint(complaintId, { status: "resolved", resolutionNote: note }), ["Complaint resolved"])} />
-      <ConfirmDialog open={dialog === "dismissed"} onClose={() => setDialog(null)} tone="warning" icon={XCircle} confirmLabel="Dismiss" title="Dismiss this complaint?" description="Use this for duplicates or complaints that don’t need action. The reporter sees your note."
-        reason={{ label: "Why is it being dismissed?", required: true, minLength: 5 }}
-        onConfirm={(note) => apply(() => AdminAPI.updateComplaint(complaintId, { status: "dismissed", resolutionNote: note }), ["Complaint dismissed"])} />
+        onConfirm={(note) => apply(() => AdminAPI.resolveComplaint(complaintId, "propose", note), ["Resolution proposed", "Waiting for the reporter to confirm."])} />
+      <ConfirmDialog open={dialog === "reject"} onClose={() => setDialog(null)} tone="warning" icon={XCircle} confirmLabel="Resume discussion" title="Continue discussing this complaint?" description="The pending resolution will be withdrawn and the complaint will return to In review."
+        reason={{ label: "Why should the discussion continue?", required: true, minLength: 5 }}
+        onConfirm={(note) => apply(() => AdminAPI.resolveComplaint(complaintId, "reject", note), ["Discussion resumed"])} />
     </Drawer>
   );
 }
@@ -169,7 +176,7 @@ export default function ComplaintsPage() {
   const rows = useMemo(() => {
     const needle = debounced.trim().toLowerCase();
     return (data?.complaints || []).filter((c) =>
-      (status === "all" || (status === "active" ? ["open", "in_review"].includes(c.status) : c.status === status))
+      (status === "all" || (status === "active" ? ["open", "in_review", "resolution_pending"].includes(c.status) : c.status === status))
       && (source === "all" || c.source === source) && (priority === "all" || c.priority === priority)
       && (!needle || `${c.complaintId} ${c.subject} ${c.description} ${c.reporter?.name || ""} ${c.reporter?.email || ""} ${c.pharmacyName || ""} ${c.orderId || ""}`.toLowerCase().includes(needle)));
   }, [data, debounced, status, source, priority]);
@@ -201,7 +208,7 @@ export default function ComplaintsPage() {
         </div>
         <Toolbar>
           <SearchInput value={query} onChange={setQuery} placeholder="Search subject, ID, reporter, order…" className="w-full sm:w-72" />
-          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="h-9.5 w-full sm:w-40" aria-label="Status"><option value="active">Open + in review</option><option value="open">Open</option><option value="in_review">In review</option><option value="resolved">Resolved</option><option value="dismissed">Dismissed</option><option value="all">All statuses</option></Select>
+          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="h-9.5 w-full sm:w-40" aria-label="Status"><option value="active">Active complaints</option><option value="open">Open</option><option value="in_review">In review</option><option value="resolution_pending">Awaiting confirmation</option><option value="resolved">Resolved / previous</option><option value="dismissed">Dismissed</option><option value="all">All statuses</option></Select>
           {scope === "inbox" && <Select value={source} onChange={(e) => setSource(e.target.value)} className="h-9.5 w-full sm:w-40" aria-label="Source"><option value="all">From anyone</option><option value="pharmacy">From pharmacies</option><option value="customer">From customers</option></Select>}
           <Select value={priority} onChange={(e) => setPriority(e.target.value)} className="h-9.5 w-full sm:w-36" aria-label="Priority"><option value="all">Any priority</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></Select>
         </Toolbar>

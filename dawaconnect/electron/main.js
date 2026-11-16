@@ -41,6 +41,7 @@ import {
   createComplaint,
   replyComplaint,
   updateComplaintStatus,
+  resolveComplaint,
   locationAvailable,
   searchPharmacyLocation,
   confirmPharmacyLocation,
@@ -843,6 +844,15 @@ app.whenReady().then(async () => {
   ipcMain.handle('complaints:update-status', async (_event, payload) => {
     try {
       const data = await updateComplaintStatus(payload.ownerId, payload.id, payload.status, payload.note)
+      return { ok: true, data }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('complaints:resolve', async (_event, payload) => {
+    try {
+      const data = await resolveComplaint(payload.ownerId, payload.id, payload.action, payload.note)
       return { ok: true, data }
     } catch (error) {
       return { ok: false, error: error.message }

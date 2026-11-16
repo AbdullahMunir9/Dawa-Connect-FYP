@@ -70,7 +70,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     list: (payload) => ipcRenderer.invoke('complaints:list', payload),
     create: (payload) => ipcRenderer.invoke('complaints:create', payload),
     reply: (payload) => ipcRenderer.invoke('complaints:reply', payload),
-    updateStatus: (payload) => ipcRenderer.invoke('complaints:update-status', payload)
+    updateStatus: (payload) => ipcRenderer.invoke('complaints:update-status', payload),
+    resolve: (payload) => ipcRenderer.invoke('complaints:resolve', payload)
   },
   chat: {
     connect: (payload) => ipcRenderer.invoke('chat:connect', payload),

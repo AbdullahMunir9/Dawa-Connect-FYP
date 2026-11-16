@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 // Shared complaints contract (MarketPlace.complaints). The Admin module and the
 // Pharmacy desktop app read/write the same documents – keep field names in sync.
 export const COMPLAINT_CATEGORIES = ["order", "delivery", "product", "payment", "service", "platform", "account", "catalog_data", "catalog_image", "other"];
-export const COMPLAINT_STATUSES = ["open", "in_review", "resolved", "dismissed"];
+export const COMPLAINT_STATUSES = ["open", "in_review", "resolution_pending", "resolved", "dismissed"];
 export const COMPLAINT_PRIORITIES = ["low", "medium", "high"];
 
 const PartySchema = new mongoose.Schema({
@@ -33,7 +33,19 @@ const ComplaintSchema = new mongoose.Schema({
   priority: { type: String, enum: COMPLAINT_PRIORITIES, default: "medium" },
   status: { type: String, enum: COMPLAINT_STATUSES, default: "open", index: true },
   messages: { type: [MessageSchema], default: [] },
-  resolution: { type: new mongoose.Schema({ note: String, by: PartySchema, at: Date }, { _id: false }), default: null },
+  resolution: {
+    type: new mongoose.Schema({
+      note: { type: String, default: "" },
+      proposedBy: PartySchema,
+      proposedAt: Date,
+      confirmations: { type: [{ by: PartySchema, at: Date }], default: [] },
+      completedAt: Date,
+      // Kept for compatibility with historical resolved complaints.
+      by: PartySchema,
+      at: Date,
+    }, { _id: false }),
+    default: null,
+  },
   lastActivityAt: { type: Date, default: Date.now },
 }, { timestamps: true, collection: "complaints" });
 

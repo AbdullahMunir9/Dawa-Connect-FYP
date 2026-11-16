@@ -72,6 +72,7 @@ export const AdminAPI = {
   complaint: (id) => api.get(`/complaints/${id}`).then((r) => r.data.complaint),
   replyComplaint: (id, text) => api.post(`/complaints/${id}/reply`, { text }).then((r) => r.data.complaint),
   updateComplaint: (id, payload) => api.patch(`/complaints/${id}`, payload).then((r) => r.data.complaint),
+  resolveComplaint: (id, action, note = "") => api.post(`/complaints/${id}/resolution`, { action, note }).then((r) => r.data.complaint),
 
   medicineCatalog: (params) => api.get("/admin/medicine-catalog", { params }).then((r) => r.data),
   createMedicineCatalog: (payload) => api.post("/admin/medicine-catalog", payload).then((r) => r.data),

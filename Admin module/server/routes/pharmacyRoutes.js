@@ -1,7 +1,7 @@
 import express from 'express';
 import { pharmacyView, requirePharmacyAuth } from '../middleware/pharmacyAuth.js';
 import {
-  confirmPharmacyLocation, createComplaint, createEntity, createProduct, deleteEntity, deleteProduct,
+  actOnComplaintResolution, confirmPharmacyLocation, createComplaint, createEntity, createProduct, deleteEntity, deleteProduct,
   getProfile, listComplaints, listEntity, listProducts, locationConfigured, loginPharmacy, logoutPharmacy,
   registrationAvailability, registerPharmacy, resendRegistrationOtp, replyComplaint, requestPasswordReset, resetPassword,
   searchAvailableMedicines, searchPharmacyLocation, updateComplaintStatus, updateEntity, updateProduct, updateProfile, markAllNotificationsRead,
@@ -110,6 +110,7 @@ router.get('/complaints', asyncRoute(async (req) => listComplaints(req.pharmacyA
 router.post('/complaints', asyncRoute(async (req) => createComplaint(req.pharmacyAuth.ownerId, req.body)));
 router.post('/complaints/:id/replies', asyncRoute(async (req) => replyComplaint(req.pharmacyAuth.ownerId, req.params.id, req.body?.text)));
 router.patch('/complaints/:id/status', asyncRoute(async (req) => updateComplaintStatus(req.pharmacyAuth.ownerId, req.params.id, req.body?.status, req.body?.note)));
+router.post('/complaints/:id/resolution', asyncRoute(async (req) => actOnComplaintResolution(req.pharmacyAuth.ownerId, req.params.id, req.body?.action, req.body?.note)));
 
 export default router;
 

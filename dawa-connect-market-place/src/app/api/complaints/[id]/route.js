@@ -5,6 +5,7 @@ import connectToDatabase from "@/lib/mongodb";
 import { getCommerceDatabases } from "@/lib/pharmacyCatalog";
 import Complaint from "@/models/Complaint";
 import User from "@/models/User";
+import { applyResolutionAction, complaintView, normalizeComplaintMessages, reopenForConversation } from "@/lib/complaintWorkflow";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const key = JWT_SECRET ? new TextEncoder().encode(JWT_SECRET) : null;
@@ -37,7 +38,7 @@ export async function GET(req, { params }) {
     const { id } = await params;
     const complaint = await findOwnComplaint(id, userId);
     if (!complaint) return NextResponse.json({ message: "Complaint not found" }, { status: 404 });
-    return NextResponse.json({ complaint });
+    return NextResponse.json({ complaint: complaintView(complaint) });
   } catch (error) {
     console.error("Get complaint error:", error);
     return NextResponse.json({ message: "Could not load this complaint." }, { status: 500 });
@@ -59,9 +60,13 @@ export async function POST(req, { params }) {
     if (!complaint || !user) return NextResponse.json({ message: "Complaint not found" }, { status: 404 });
 
     const now = new Date();
-    const reopened = ["resolved", "dismissed"].includes(complaint.status);
-    complaint.messages.push({ by: { id: String(user._id), name: user.name, email: user.email, role: "customer" }, text, at: now });
-    if (reopened) { complaint.status = "open"; complaint.resolution = null; }
+    // Older complaints used sender/senderName fields. Convert them before saving
+    // so a legacy thread can always be replied to with the current schema.
+    complaint.messages = normalizeComplaintMessages(complaint);
+    const reopened = reopenForConversation(complaint);
+    const customer = { id: String(user._id), name: String(user.name || user.email || "Customer"), email: String(user.email || ""), role: "customer" };
+    complaint.messages.push({ by: customer, text, at: now });
+    if (complaint.status === "open") complaint.status = "in_review";
     complaint.lastActivityAt = now;
     await complaint.save();
 
@@ -70,16 +75,57 @@ export async function POST(req, { params }) {
         const { pharmacyDb } = await getCommerceDatabases();
         await pharmacyDb.collection("notifications").insertOne({
           ownerId: complaint.pharmacyId, type: "complaint", complaintId: complaint.complaintId,
-          message: `${user.name} ${reopened ? "reopened" : "replied to"} complaint ${complaint.complaintId}`,
+          message: `${customer.name} ${reopened ? "reopened" : "replied to"} complaint ${complaint.complaintId}`,
           read: false, color: "#f59e0b", createdAt: now, updatedAt: now,
         });
       } catch (error) {
         console.error("Complaint notification failed:", error.message);
       }
     }
-    return NextResponse.json({ complaint });
+    return NextResponse.json({ complaint: complaintView(complaint) });
   } catch (error) {
     console.error("Reply complaint error:", error);
     return NextResponse.json({ message: "Could not send your reply." }, { status: 500 });
+  }
+}
+
+// A complaint closes only after its customer and its actual handler both agree.
+export async function PATCH(req, { params }) {
+  try {
+    const userId = await getUserFromReq(req);
+    if (!userId) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    await connectToDatabase();
+    const { id } = await params;
+    const body = await req.json().catch(() => ({}));
+    const [complaint, user] = await Promise.all([findOwnComplaint(id, userId), User.findById(userId).select("name email").lean()]);
+    if (!complaint || !user) return NextResponse.json({ message: "Complaint not found" }, { status: 404 });
+
+    const now = new Date();
+    complaint.messages = normalizeComplaintMessages(complaint);
+    const actor = { id: String(user._id), name: String(user.name || user.email || "Customer"), email: String(user.email || ""), role: "customer" };
+    let result;
+    try {
+      result = applyResolutionAction(complaint, { action: String(body.action || ""), actor, note: String(body.note || ""), now });
+    } catch (error) {
+      return NextResponse.json({ message: error.message || "Could not update the resolution." }, { status: error.status || 400 });
+    }
+    complaint.messages.push({ by: actor, text: result.eventText, at: now });
+    complaint.lastActivityAt = now;
+    await complaint.save();
+
+    if (complaint.target === "pharmacy" && complaint.pharmacyId) {
+      try {
+        const { pharmacyDb } = await getCommerceDatabases();
+        await pharmacyDb.collection("notifications").insertOne({
+          ownerId: complaint.pharmacyId, type: "complaint", complaintId: complaint.complaintId,
+          message: `${user.name} ${result.completed ? "confirmed the resolution of" : "updated the resolution for"} complaint ${complaint.complaintId}`,
+          read: false, color: "#f59e0b", createdAt: now, updatedAt: now,
+        });
+      } catch (error) { console.error("Complaint notification failed:", error.message); }
+    }
+    return NextResponse.json({ complaint: complaintView(complaint) });
+  } catch (error) {
+    console.error("Resolve complaint error:", error);
+    return NextResponse.json({ message: "Could not update the complaint resolution." }, { status: 500 });
   }
 }

@@ -281,3 +281,7 @@ export function updateComplaintStatus(_ownerId, id, status, note = '') {
   return apiRequest(`/pharmacy/complaints/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: { status, note } });
 }
 
+export function resolveComplaint(_ownerId, id, action, note = '') {
+  return apiRequest(`/pharmacy/complaints/${encodeURIComponent(id)}/resolution`, { method: 'POST', body: { action, note } });
+}
+

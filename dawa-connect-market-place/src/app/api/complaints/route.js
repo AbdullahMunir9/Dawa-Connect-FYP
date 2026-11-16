@@ -6,6 +6,7 @@ import { getCommerceDatabases } from "@/lib/pharmacyCatalog";
 import Complaint, { COMPLAINT_CATEGORIES, generateComplaintId } from "@/models/Complaint";
 import Order from "@/models/Order";
 import User from "@/models/User";
+import { complaintView } from "@/lib/complaintWorkflow";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const key = JWT_SECRET ? new TextEncoder().encode(JWT_SECRET) : null;
@@ -50,7 +51,7 @@ export async function GET(req) {
       Complaint.find({ "reporter.id": String(userId), source: "customer" }).sort({ lastActivityAt: -1 }).lean(),
       complaintOptions(userId),
     ]);
-    return NextResponse.json({ complaints, ...options });
+    return NextResponse.json({ complaints: complaints.map(complaintView), ...options });
   } catch (error) {
     console.error("List complaints error:", error);
     return NextResponse.json({ message: "Could not load your complaints." }, { status: 500 });
@@ -130,7 +131,7 @@ export async function POST(req) {
       }
     }
 
-    return NextResponse.json({ complaint }, { status: 201 });
+    return NextResponse.json({ complaint: complaintView(complaint) }, { status: 201 });
   } catch (error) {
     console.error("Create complaint error:", error);
     return NextResponse.json({ message: "Could not submit your complaint. Please try again." }, { status: 500 });

@@ -13,10 +13,16 @@ const CATEGORIES = [
 const STATUS_META = {
   open: { label: "Open", className: "bg-amber-50 text-amber-800 border-amber-200", Icon: Clock3 },
   in_review: { label: "In review", className: "bg-blue-50 text-blue-800 border-blue-200", Icon: RotateCcw },
+  resolution_pending: { label: "Awaiting your confirmation", className: "bg-violet-50 text-violet-800 border-violet-200", Icon: Clock3 },
   resolved: { label: "Resolved", className: "bg-teal-50 text-teal-800 border-teal-200", Icon: CheckCircle2 },
   dismissed: { label: "Closed", className: "bg-gray-100 text-gray-700 border-gray-200", Icon: XCircle },
 };
 const ROLE_LABEL = { customer: "You", pharmacy: "Pharmacy", admin: "DawaConnect support" };
+
+function messageIdentity(message) {
+  const role = message?.by?.role || message?.sender || "pharmacy";
+  return { role, label: message?.by?.name || message?.senderName || ROLE_LABEL[role] || "Support" };
+}
 
 function StatusPill({ status }) {
   const meta = STATUS_META[status] || STATUS_META.open;
@@ -128,6 +134,8 @@ function NewComplaintForm({ pharmacies, orders, initial, onCancel, onCreated }) 
 
 function ComplaintThread({ complaint, onBack, onUpdated }) {
   const [reply, setReply] = useState("");
+  const [resolutionNote, setResolutionNote] = useState("");
+  const [showResolutionForm, setShowResolutionForm] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const closed = ["resolved", "dismissed"].includes(complaint.status);
@@ -147,6 +155,22 @@ function ComplaintThread({ complaint, onBack, onUpdated }) {
       setSending(false);
     }
   }
+
+  async function actOnResolution(action, note = "") {
+    setSending(true); setError("");
+    try {
+      const data = await readJson(await fetch(`/api/complaints/${complaint._id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, note }) }));
+      onUpdated(data.complaint);
+      setShowResolutionForm(false);
+      setResolutionNote("");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const waitingForCustomer = complaint.status === "resolution_pending" && !(complaint.resolution?.confirmations || []).some((confirmation) => confirmation.by?.role === "customer");
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
@@ -169,19 +193,38 @@ function ComplaintThread({ complaint, onBack, onUpdated }) {
         {complaint.messages?.length ? (
           <ul className="flex flex-col gap-3">
             {complaint.messages.map((m, i) => {
-              const mine = m.by?.role === "customer";
+              const identity = messageIdentity(m);
+              const mine = identity.role === "customer";
               return (
                 <li key={i} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${mine ? "bg-blue-800 text-white rounded-tr-sm" : "bg-gray-100 text-gray-900 rounded-tl-sm"}`}>
-                    <p className={`text-[11px] font-semibold mb-1 ${mine ? "text-blue-100" : "text-gray-500"}`}>{mine ? "You" : `${m.by?.name || ROLE_LABEL[m.by?.role]} · ${ROLE_LABEL[m.by?.role]}`}</p>
-                    <p className="whitespace-pre-wrap leading-6">{m.text}</p>
-                    <p className={`text-[10px] mt-1 ${mine ? "text-blue-200" : "text-gray-400"}`}>{formatDate(m.at)}</p>
+                    <p className={`text-[11px] font-semibold mb-1 ${mine ? "text-blue-100" : "text-gray-500"}`}>{mine ? "You" : `${identity.label} · ${ROLE_LABEL[identity.role] || "Support"}`}</p>
+                    <p className="whitespace-pre-wrap leading-6">{m.text || m.message || m.content}</p>
+                    <p className={`text-[10px] mt-1 ${mine ? "text-blue-200" : "text-gray-400"}`}>{formatDate(m.at || m.createdAt)}</p>
                   </div>
                 </li>
               );
             })}
           </ul>
         ) : <p className="text-sm text-gray-500 rounded-lg bg-gray-50 p-4">No replies yet. {handledBy} will respond here; you will also see updates on this page.</p>}
+
+        {!closed && complaint.status !== "resolution_pending" && (
+          <div className="mt-5 rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><p className="font-semibold">Has this complaint been handled?</p><p className="mt-1 text-xs text-teal-800">Propose the outcome here. The complaint closes only after {handledBy} also confirms it.</p></div>
+              {!showResolutionForm && <button type="button" onClick={() => setShowResolutionForm(true)} className="rounded-lg bg-teal-700 px-3 py-2 text-xs font-semibold text-white">Propose resolved</button>}
+            </div>
+            {showResolutionForm && <div className="mt-3"><textarea value={resolutionNote} onChange={(e) => setResolutionNote(e.target.value)} rows={3} maxLength={1000} placeholder="Briefly explain the agreed outcome…" className="w-full rounded-lg border border-teal-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600" /><div className="mt-2 flex justify-end gap-2"><button type="button" onClick={() => { setShowResolutionForm(false); setResolutionNote(""); }} className="rounded-lg border border-teal-300 px-3 py-2 text-xs font-semibold">Cancel</button><button type="button" disabled={sending || resolutionNote.trim().length < 5} onClick={() => actOnResolution("propose", resolutionNote.trim())} className="rounded-lg bg-teal-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">Send proposal</button></div></div>}
+          </div>
+        )}
+
+        {complaint.status === "resolution_pending" && (
+          <div className="mt-5 rounded-lg border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950">
+            <p className="font-semibold">A resolution has been proposed</p>
+            <p className="mt-1">{waitingForCustomer ? "Your confirmation is required before this complaint is resolved." : "Your confirmation is recorded. Waiting for the other party."}</p>
+            {waitingForCustomer && <div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={sending} onClick={() => actOnResolution("confirm")} className="rounded-lg bg-teal-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">Confirm resolution</button><button type="button" disabled={sending} onClick={() => actOnResolution("reject", "I need more help with this complaint.")} className="rounded-lg border border-violet-300 px-3 py-2 text-xs font-semibold text-violet-900 disabled:opacity-60">Continue discussion</button></div>}
+          </div>
+        )}
 
         <form onSubmit={send} className="mt-5 flex flex-col gap-2">
           {closed && <p className="text-xs text-gray-500 inline-flex items-center gap-1"><Info className="h-3.5 w-3.5" /> This complaint is closed. Sending a new message will reopen it.</p>}
@@ -217,8 +260,8 @@ function ComplaintsContent() {
   useEffect(() => { if (user) load(); }, [user, load]);
 
   const selected = data.complaints.find((c) => c._id === selectedId) || null;
-  const visible = useMemo(() => data.complaints.filter((c) => filter === "all" || (filter === "open" ? ["open", "in_review"].includes(c.status) : ["resolved", "dismissed"].includes(c.status))), [data, filter]);
-  const openCount = data.complaints.filter((c) => ["open", "in_review"].includes(c.status)).length;
+  const visible = useMemo(() => data.complaints.filter((c) => filter === "all" || (filter === "open" ? ["open", "in_review", "resolution_pending"].includes(c.status) : ["resolved", "dismissed"].includes(c.status))), [data, filter]);
+  const openCount = data.complaints.filter((c) => ["open", "in_review", "resolution_pending"].includes(c.status)).length;
 
   function upsert(complaint) {
     setData((d) => ({ ...d, complaints: d.complaints.some((c) => c._id === complaint._id) ? d.complaints.map((c) => (c._id === complaint._id ? complaint : c)) : [complaint, ...d.complaints] }));
@@ -254,7 +297,7 @@ function ComplaintsContent() {
 
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
         <div className="flex items-center gap-2 p-3 border-b border-gray-100">
-          {[["all", "All"], ["open", "Open"], ["closed", "Closed"]].map(([value, label]) => (
+          {[["all", "All"], ["open", "Open"], ["closed", "Resolved / previous"]].map(([value, label]) => (
             <button key={value} type="button" onClick={() => setFilter(value)} className={`px-3 py-1.5 rounded-lg text-sm font-medium ${filter === value ? "bg-blue-50 text-blue-800" : "text-gray-600 hover:bg-gray-50"}`}>{label}</button>
           ))}
         </div>

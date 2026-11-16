@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import pharmacyDb from '../db/pharmacyConnection.js';
@@ -6,6 +6,7 @@ import { pharmacyView } from '../middleware/pharmacyAuth.js';
 import { insertInventoryMovement } from './inventoryMovement.js';
 import { prepareInventoryProduct, validateResolvedProductCatalogs } from './medicineCatalogCore.js';
 import { findCatalogMedicine, searchMedicineCatalog } from './medicineCatalogService.js';
+import { applyResolutionAction, complaintView, normalizeComplaintMessages, reopenForConversation } from './complaintWorkflow.js';
 
 const { ObjectId } = mongoose.Types;
 const MARKETPLACE_DB_NAME = process.env.MARKETPLACE_DB_NAME || 'MarketPlace';
@@ -33,7 +34,6 @@ const ORDER_TRANSITIONS = {
   Cancelled: [],
 };
 const COMPLAINT_CATEGORIES = ['order', 'delivery', 'product', 'payment', 'service', 'platform', 'account', 'catalog_data', 'catalog_image', 'other'];
-const COMPLAINT_CLOSED = ['resolved', 'dismissed'];
 const locationSessions = new Map();
 let indexesReady;
 
@@ -975,7 +975,7 @@ export async function listComplaints(ownerId) {
     complaintsCollection().find({ target: 'pharmacy', pharmacyId: ownerId }).sort({ lastActivityAt: -1 }).limit(300).toArray(),
     complaintsCollection().find({ source: 'pharmacy', 'reporter.id': ownerId }).sort({ lastActivityAt: -1 }).limit(300).toArray(),
   ]);
-  return { inbox: inbox.map(mapDoc), outbox: outbox.map(mapDoc) };
+  return { inbox: inbox.map((doc) => mapDoc(complaintView(doc))), outbox: outbox.map((doc) => mapDoc(complaintView(doc))) };
 }
 
 export async function createComplaint(ownerId, value = {}) {
@@ -1001,23 +1001,40 @@ export async function replyComplaint(ownerId, id, text) {
   if (!message) throw new Error('Reply cannot be empty.');
   const current = await findParticipantComplaint(ownerId, id);
   const now = new Date();
-  const status = COMPLAINT_CLOSED.includes(current.status) ? 'open' : current.status;
+  normalizeComplaintMessages(current);
+  reopenForConversation(current);
+  const actor = await pharmacyParty(ownerId);
+  if (current.status === 'open') current.status = 'in_review';
+  current.messages.push({ by: actor, text: message, at: now });
   await complaintsCollection().updateOne({ _id: current._id }, {
-    $push: { messages: { id: randomUUID(), sender: 'pharmacy', senderName: current.pharmacyName || 'Pharmacy', text: message, createdAt: now } },
-    $set: { status, lastActivityAt: now, updatedAt: now },
+    $set: { messages: current.messages, status: current.status, resolution: current.resolution || null, lastActivityAt: now, updatedAt: now },
   });
-  return mapDoc(await complaintsCollection().findOne({ _id: current._id }));
+  return mapDoc(complaintView(await complaintsCollection().findOne({ _id: current._id })));
 }
 
-export async function updateComplaintStatus(ownerId, id, status, note = '') {
-  if (!['open', 'in_review', 'resolved', 'dismissed'].includes(status)) throw new Error('Invalid complaint status.');
+export async function updateComplaintStatus(ownerId, id, status, _note = '') {
+  if (!['open', 'in_review'].includes(status)) throw Object.assign(new Error('Use the resolution confirmation controls to close a complaint.'), { status: 400 });
   const current = await findParticipantComplaint(ownerId, id);
   if (!(current.target === 'pharmacy' && current.pharmacyId === ownerId)) throw Object.assign(new Error('Only received complaints can be updated by a pharmacy.'), { status: 403 });
   const now = new Date();
   const update = { status, lastActivityAt: now, updatedAt: now };
-  if (COMPLAINT_CLOSED.includes(status)) update.resolution = { note: String(note || '').trim().slice(0, 1000), resolvedBy: 'pharmacy', resolvedAt: now };
-  else update.resolution = null;
+  if (status === 'open') update.resolution = null;
   await complaintsCollection().updateOne({ _id: current._id }, { $set: update });
-  return mapDoc(await complaintsCollection().findOne({ _id: current._id }));
+  return mapDoc(complaintView(await complaintsCollection().findOne({ _id: current._id })));
+}
+
+export async function actOnComplaintResolution(ownerId, id, action, note = '') {
+  const complaint = await findParticipantComplaint(ownerId, id);
+  const now = new Date();
+  normalizeComplaintMessages(complaint);
+  const actor = await pharmacyParty(ownerId);
+  const result = applyResolutionAction(complaint, { action: String(action || ''), actor, note: String(note || ''), now });
+  complaint.messages.push({ by: actor, text: result.eventText, at: now });
+  complaint.lastActivityAt = now;
+  complaint.updatedAt = now;
+  await complaintsCollection().updateOne({ _id: complaint._id }, {
+    $set: { messages: complaint.messages, status: complaint.status, resolution: complaint.resolution, lastActivityAt: now, updatedAt: now },
+  });
+  return mapDoc(complaintView(await complaintsCollection().findOne({ _id: complaint._id })));
 }
 

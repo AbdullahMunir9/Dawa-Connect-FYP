@@ -518,7 +518,17 @@ export const AppProvider = ({ children }) => {
     return result
   }
 
-  const openComplaintCount = complaints.inbox.filter((c) => ['open', 'in_review'].includes(c.status)).length
+  const actOnComplaintResolution = async (id, action, note = '') => {
+    if (!user?.id) return { ok: false, error: 'Not signed in' }
+    const result = await window.electronAPI.complaints.resolve({ ownerId: String(user.id), id, action, note })
+    if (result.ok) {
+      applyComplaint(result.data)
+      showToast(result.data.status === 'resolved' ? 'Complaint resolved by both parties' : 'Resolution response recorded')
+    } else showToast(result.error, 'error')
+    return result
+  }
+
+  const openComplaintCount = complaints.inbox.filter((c) => ['open', 'in_review', 'resolution_pending'].includes(c.status)).length
 
   const unreadCount = notifications.filter((n) => !n.read).length
   const lowStockItems = inventory.filter((i) => i.stock <= i.threshold)
@@ -560,7 +570,7 @@ export const AppProvider = ({ children }) => {
       staff, addStaff, removeStaff,
       reviews, refreshReviews, returns, updateReturn,
       notifications, markAllNotificationsRead, addNotification,
-      complaints, fileComplaint, replyToComplaint, setComplaintStatus, openComplaintCount,
+      complaints, fileComplaint, replyToComplaint, setComplaintStatus, actOnComplaintResolution, openComplaintCount,
       toasts, showToast,
       pharmacyProfile, setPharmacyProfile, uploadPharmacyPhoto, removePharmacyPhoto,
       unreadCount, chatUnreadCount, lowStockItems, expiringItems,

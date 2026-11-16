@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 // Shared contract with the Marketplace (customers) and Pharmacy app.
 // Collection: MarketPlace.complaints. Keep field names in sync across modules.
 export const COMPLAINT_CATEGORIES = ['order', 'delivery', 'product', 'payment', 'service', 'platform', 'account', 'catalog_data', 'catalog_image', 'other'];
-export const COMPLAINT_STATUSES = ['open', 'in_review', 'resolved', 'dismissed'];
+export const COMPLAINT_STATUSES = ['open', 'in_review', 'resolution_pending', 'resolved', 'dismissed'];
 export const COMPLAINT_PRIORITIES = ['low', 'medium', 'high'];
 
 const partySchema = new mongoose.Schema({
@@ -34,7 +34,16 @@ const complaintSchema = new mongoose.Schema({
   status: { type: String, enum: COMPLAINT_STATUSES, default: 'open', index: true },
   messages: { type: [messageSchema], default: [] },
   resolution: {
-    type: new mongoose.Schema({ note: String, by: partySchema, at: Date }, { _id: false }),
+    type: new mongoose.Schema({
+      note: { type: String, default: '' },
+      proposedBy: partySchema,
+      proposedAt: Date,
+      confirmations: { type: [{ by: partySchema, at: Date }], default: [] },
+      completedAt: Date,
+      // Kept for compatibility with historical resolved complaints.
+      by: partySchema,
+      at: Date,
+    }, { _id: false }),
     default: null,
   },
   lastActivityAt: { type: Date, default: Date.now },
