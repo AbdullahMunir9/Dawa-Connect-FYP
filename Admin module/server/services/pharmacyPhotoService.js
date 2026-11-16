@@ -1,7 +1,9 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import mongoose from 'mongoose';
 import { pharmacyDatabase } from './pharmacyService.js';
 
-const PHOTO_SLOTS = new Set(['inside', 'outside']);
+const PUBLIC_PHOTO_SLOTS = new Set(['inside', 'outside']);
+const REGISTRATION_PHOTO_SLOTS = new Set([...PUBLIC_PHOTO_SLOTS, 'licenseDocument']);
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
 function apiError(message, status = 400) {
@@ -16,9 +18,21 @@ function cloudinaryConfig() {
   return { cloudName, apiKey, apiSecret };
 }
 
-function validSlot(value) {
-  const slot = String(value || '').toLowerCase();
-  if (!PHOTO_SLOTS.has(slot)) throw apiError('Photo type must be inside or outside.');
+function normalizedSlot(value) {
+  const slot = String(value || '').trim().toLowerCase();
+  if (slot === 'licensedocument') return 'licenseDocument';
+  return slot;
+}
+
+function validPublicSlot(value) {
+  const slot = normalizedSlot(value);
+  if (!PUBLIC_PHOTO_SLOTS.has(slot)) throw apiError('Photo type must be inside or outside.');
+  return slot;
+}
+
+function validRegistrationSlot(value) {
+  const slot = normalizedSlot(value);
+  if (!REGISTRATION_PHOTO_SLOTS.has(slot)) throw apiError('Registration image type is invalid.');
   return slot;
 }
 
@@ -72,9 +86,9 @@ async function cloudinaryRequest(path, fields, file) {
   return result;
 }
 
-async function uploadToCloudinary(ownerId, slot, buffer) {
+async function uploadToCloudinary(ownerId, slot, buffer, publicIdOverride = '') {
   const mimeType = validatedPhoto(buffer);
-  const publicId = `dawaconnect/pharmacies/${ownerId}/${slot}`;
+  const publicId = publicIdOverride || `dawaconnect/pharmacies/${ownerId}/${slot}`;
   const result = await cloudinaryRequest('upload', {
     public_id: publicId, overwrite: 'true', invalidate: 'true',
   }, { buffer, mimeType });
@@ -91,7 +105,7 @@ async function destroyOnCloudinary(publicId) {
 }
 
 async function savePhoto(ownerId, slotValue, buffer) {
-  const slot = validSlot(slotValue);
+  const slot = validPublicSlot(slotValue);
   const db = await pharmacyDatabase();
   const profile = await db.collection('profiles').findOne({ ownerId: String(ownerId) });
   if (!profile) throw apiError('Pharmacy profile not found.', 404);
@@ -101,6 +115,33 @@ async function savePhoto(ownerId, slotValue, buffer) {
     { $set: { [`photos.${slot}`]: photo, updatedAt: new Date() } },
   );
   return { slot, photo };
+}
+
+async function saveLicenseDocument(ownerId, buffer) {
+  if (!mongoose.isValidObjectId(ownerId)) throw apiError('Pharmacy registration not found.', 404);
+  const db = await pharmacyDatabase();
+  const userId = new mongoose.Types.ObjectId(String(ownerId));
+  const user = await db.collection('users').findOne({ _id: userId }, { projection: { licenseDocument: 1 } });
+  if (!user) throw apiError('Pharmacy registration not found.', 404);
+
+  // A random identifier prevents the verification document from having a predictable public URL.
+  const publicId = `dawaconnect/pharmacies/${ownerId}/verification/drug-sale-license-${randomBytes(18).toString('hex')}`;
+  const photo = await uploadToCloudinary(String(ownerId), 'licenseDocument', buffer, publicId);
+  try {
+    await db.collection('users').updateOne(
+      { _id: userId },
+      { $set: { licenseDocument: photo, updatedAt: new Date() } },
+    );
+  } catch (error) {
+    await destroyOnCloudinary(photo.publicId).catch(() => {});
+    throw error;
+  }
+  if (user.licenseDocument?.publicId) {
+    await destroyOnCloudinary(user.licenseDocument.publicId).catch((error) => {
+      console.error('Old drug sale licence cleanup failed:', error.message);
+    });
+  }
+  return { slot: 'licenseDocument', photo };
 }
 
 function registrationTokenHash(value) {
@@ -115,7 +156,10 @@ export async function uploadRegistrationPhoto(token, slot, buffer) {
     tokenHash: registrationTokenHash(rawToken), expiresAt: { $gt: new Date() },
   });
   if (!grant) throw apiError('The registration photo upload session has expired.', 401);
-  const result = await savePhoto(grant.ownerId, slot, buffer);
+  const registrationSlot = validRegistrationSlot(slot);
+  const result = registrationSlot === 'licenseDocument'
+    ? await saveLicenseDocument(grant.ownerId, buffer)
+    : await savePhoto(grant.ownerId, registrationSlot, buffer);
   await db.collection('registrationPhotoUploads').updateOne(
     { _id: grant._id },
     { $addToSet: { uploadedSlots: result.slot }, $set: { updatedAt: new Date() } },
@@ -128,7 +172,7 @@ export function uploadProfilePhoto(ownerId, slot, buffer) {
 }
 
 export async function removeProfilePhoto(ownerId, slotValue) {
-  const slot = validSlot(slotValue);
+  const slot = validPublicSlot(slotValue);
   const db = await pharmacyDatabase();
   const profile = await db.collection('profiles').findOne({ ownerId: String(ownerId) });
   if (!profile) throw apiError('Pharmacy profile not found.', 404);

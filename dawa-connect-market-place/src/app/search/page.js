@@ -15,6 +15,13 @@ import { readDeliveryLocation, saveDeliveryLocation } from "@/lib/deliveryLocati
 
 const emptyPagination = { page: 1, totalPages: 1, total: 0, startIndex: 0, endIndex: 0 };
 
+const PRODUCT_CATEGORIES = [
+  "Analgesic", "Antibiotic", "Antidiabetic", "Antacid", "Antihistamine",
+  "Anti-inflammatory", "Cardiovascular", "Supplement", "Antiviral",
+  "Dermatology", "Respiratory", "Gastrointestinal", "Neurology",
+  "Eye & Ear Care", "First Aid", "Personal Care", "Baby Care", "Hygiene", "Other",
+];
+
 function DeliveryBadge({ item }) {
   const styles = {
     delivers: "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -91,6 +98,7 @@ function SearchResultsGridInner() {
   const [error, setError] = useState("");
   const [recentSearches, setRecentSearches] = useState([]);
   const [filters, setFilters] = useState({
+    category: "",
     minPrice: 0,
     maxPrice: 10000,
     maxDistance: 1000,
@@ -114,6 +122,7 @@ function SearchResultsGridInner() {
         query: searchValue,
         page: String(nextPage),
         limit: "12",
+        category: nextFilters.category,
         minPrice: String(nextFilters.minPrice),
         maxPrice: String(nextFilters.maxPrice),
         maxDistance: String(nextFilters.maxDistance),
@@ -227,6 +236,7 @@ function SearchResultsGridInner() {
 
   const clearAllFilters = () => {
     setFilters({
+      category: "",
       minPrice: 0,
       maxPrice: 10000,
       maxDistance: 1000,
@@ -322,6 +332,25 @@ function SearchResultsGridInner() {
               <h2 className="font-semibold text-gray-900">Filters</h2>
               <button onClick={clearAllFilters} className="text-sm text-blue-600 font-medium hover:underline">Clear All</button>
             </div>
+
+            {/* Product Category */}
+            <div className="mb-6">
+              <label htmlFor="product-category-filter" className="mb-4 block text-sm font-medium text-gray-900">Category</label>
+              <div className="relative">
+                <select
+                  id="product-category-filter"
+                  value={filters.category}
+                  onChange={(event) => setFilters((previous) => ({ ...previous, category: event.target.value }))}
+                  className="w-full appearance-none rounded-lg border border-gray-200 py-2.5 pl-4 pr-10 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">All categories</option>
+                  {PRODUCT_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+              </div>
+            </div>
+
+            <hr className="border-gray-100 my-6" />
 
             {/* Price Range */}
             <div className="mb-6">

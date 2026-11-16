@@ -274,6 +274,7 @@ export async function getCatalogProductById(id) {
 
 export async function searchPharmacyCatalog({
   query = "",
+  category = "",
   page = 1,
   limit = 12,
   minPrice = 0,
@@ -306,6 +307,11 @@ export async function searchPharmacyCatalog({
     ownerId: { $in: ownerIds },
     price: priceFilter,
   });
+  const normalizedCategory = String(category || "").trim();
+  if (normalizedCategory) {
+    const escapedCategory = normalizedCategory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    productFilter.category = new RegExp(`^${escapedCategory}$`, "i");
+  }
   if (inStockOnly) productFilter.stock = { $gt: 0 };
   if (normalizedQuery) {
     const escaped = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

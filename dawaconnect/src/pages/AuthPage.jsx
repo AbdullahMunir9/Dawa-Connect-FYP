@@ -418,7 +418,7 @@ export function RegisterPage({ onBack }) {
   const [showPassword, setShowPassword] = useState(false);
   const [verification, setVerification] = useState(null);
   const [registrationOtp, setRegistrationOtp] = useState('');
-  const [registrationPhotos, setRegistrationPhotos] = useState({ inside: null, outside: null });
+  const [registrationPhotos, setRegistrationPhotos] = useState({ inside: null, outside: null, licenseDocument: null });
   const [completionWarning, setCompletionWarning] = useState('');
   const [clock, setClock] = useState(Date.now());
   const [form, setForm] = useState({
@@ -642,6 +642,24 @@ export function RegisterPage({ onBack }) {
                 <div className="registration-form-grid">
                   <div className="form-group"><label className="form-label">Drug License Number *</label><input className="form-control" required value={form.licenseNumber} onChange={(event) => set('licenseNumber', event.target.value)} placeholder="DL-PB-2024-XXXXX" /></div>
                   <div className="form-group"><label className="form-label">Owner CNIC *</label><input className="form-control" required value={form.cnic} onChange={(event) => set('cnic', formatCnicInput(event.target.value))} placeholder="35202-1234567-1" maxLength={15} inputMode="numeric" autoComplete="off" /><span className="registration-field-note">13 digits; hyphens are added automatically.</span></div>
+                </div>
+                <div className="pharmacy-photo-grid registration-document-grid">
+                  <div className="pharmacy-photo-card">
+                    <div className="pharmacy-photo-preview registration-document-preview">
+                      {registrationPhotos.licenseDocument?.previewUrl
+                        ? <img src={registrationPhotos.licenseDocument.previewUrl} alt="Drug sale licence document preview" />
+                        : <><FileCheck2 size={30} /><span>No document image selected</span></>}
+                    </div>
+                    <div className="pharmacy-photo-copy">
+                      <strong>Drug sale licence document image <span className="registration-optional-label">Optional</span></strong>
+                      <span>Upload a clear picture of the complete document for administrator verification. This image is not shown to Marketplace customers.</span>
+                      <small>A clear and complete document can speed up the pharmacy registration process. JPEG, PNG or WebP · max 5 MB.</small>
+                    </div>
+                    <div className="pharmacy-photo-actions">
+                      <button type="button" className="btn btn-secondary" onClick={() => pickRegistrationPhoto('licenseDocument')}><ImagePlus size={16} /> {registrationPhotos.licenseDocument ? 'Replace' : 'Choose document'}</button>
+                      {registrationPhotos.licenseDocument && <button type="button" className="pharmacy-photo-remove" onClick={() => clearRegistrationPhoto('licenseDocument')} aria-label="Remove drug sale licence document"><Trash2 size={16} /> Remove</button>}
+                    </div>
+                  </div>
                 </div>
                 <div className="registration-review-note"><ShieldCheck size={20} /><div><strong>Administrator review required</strong><span>Your email will be verified now. Pharmacy approval happens after the licence and business details are reviewed.</span></div></div>
               </section>

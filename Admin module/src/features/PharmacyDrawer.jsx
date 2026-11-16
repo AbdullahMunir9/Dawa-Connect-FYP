@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Ban, Building2, CheckCircle2, Clock3, Download, Mail, MapPin, MessageSquareWarning, Package, Phone, RotateCcw, ShoppingBag, Star, Truck, Wallet, XCircle, AlertTriangle, FileWarning } from "lucide-react";
+import { Ban, Building2, CheckCircle2, Clock3, Download, ExternalLink, FileImage, Mail, MapPin, MessageSquareWarning, Package, Phone, RotateCcw, ShoppingBag, Star, Truck, Wallet, XCircle, AlertTriangle, FileWarning } from "lucide-react";
 import { AdminAPI } from "../lib/api";
 import { useQuery } from "../hooks/useQuery";
 import { useToast } from "../context/ToastContext";
@@ -185,6 +185,15 @@ export function PharmacyDrawer({ pharmacyId, onClose, onChanged }) {
                   { label: "Registered hours", value: pharmacy.openingTime && pharmacy.closingTime ? `${pharmacy.openingTime} – ${pharmacy.closingTime}` : "—" },
                   { label: "Registered", value: formatDateTime(pharmacy.createdAt) }, { label: "Approved", value: pharmacy.approvedAt ? formatDateTime(pharmacy.approvedAt) : "—" }, { label: "Raw status fields", value: <span className="font-mono text-xs">{pharmacy.status} / {pharmacy.approvalStatus}</span> },
                 ]} />
+                <div className="mt-4 rounded-xl border border-line bg-surface-2 p-3">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-ink"><FileImage className="h-4 w-4 text-brand-600" /> Drug sale licence document</p>
+                  {pharmacy.licenseDocument?.url ? (
+                    <a href={pharmacy.licenseDocument.url} target="_blank" rel="noreferrer" className="mt-3 block overflow-hidden rounded-lg border border-line bg-surface transition hover:border-brand-400">
+                      <img src={pharmacy.licenseDocument.url} alt="Drug sale licence document" className="max-h-72 w-full object-contain" />
+                      <span className="flex items-center justify-center gap-1.5 border-t border-line px-3 py-2 text-xs font-medium text-brand-700 dark:text-brand-300">Open full document <ExternalLink className="h-3.5 w-3.5" /></span>
+                    </a>
+                  ) : <p className="mt-2 text-xs text-muted">No document image was supplied. This field is optional and does not by itself block approval.</p>}
+                </div>
               </section>
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-ink">Storefront profile <span className="ml-1 text-xs font-normal text-muted">managed by the pharmacy</span></h3>

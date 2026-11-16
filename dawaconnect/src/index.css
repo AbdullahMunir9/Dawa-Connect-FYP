@@ -261,6 +261,12 @@ tbody tr:last-child td { border-bottom: none; }
 .pharmacy-photo-actions .btn { display: inline-flex; align-items: center; gap: 7px; }
 .pharmacy-photo-remove { display: inline-flex; align-items: center; gap: 5px; border: 0; color: #dc2626; background: transparent; font-size: 12px; font-weight: 650; cursor: pointer; }
 .pharmacy-photo-remove:hover { color: #991b1b; }
+.registration-document-grid { margin-top: 20px; grid-template-columns: minmax(0, 1fr); }
+.registration-document-grid .pharmacy-photo-card { display: grid; grid-template-columns: minmax(210px, 32%) 1fr; grid-template-areas: "preview copy" "preview actions"; }
+.registration-document-preview { grid-area: preview; height: 100%; min-height: 230px; border-right: 1px solid var(--slate-200); }
+.registration-document-grid .pharmacy-photo-copy { grid-area: copy; min-height: 0; padding-bottom: 4px; }
+.registration-document-grid .pharmacy-photo-actions { grid-area: actions; align-self: end; }
+.registration-optional-label { margin-left: 6px; padding: 3px 7px; border-radius: 999px; color: #0f766e; background: #ccfbf1; font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .registration-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--slate-200); }
 .registration-actions .btn-primary { min-width: 245px; justify-content: center; }
 .registration-card-otp { width: min(620px,100%); margin: 0 auto; padding: 38px 52px; }
@@ -353,6 +359,8 @@ tbody tr:last-child td { border-bottom: none; }
   .registration-form-grid, .registration-form-grid-3, .registration-form-grid-4 { grid-template-columns: 1fr; }
   .registration-detail-section .location-picker-map { height: 340px; }
   .pharmacy-photo-grid { grid-template-columns: 1fr; }
+  .registration-document-grid .pharmacy-photo-card { display: block; }
+  .registration-document-preview { min-height: 200px; border-right: 0; }
   .registration-actions { flex-direction: column-reverse; }
   .registration-actions .btn { width: 100%; justify-content: center; }
   .registration-card-otp { padding: 30px 20px; }

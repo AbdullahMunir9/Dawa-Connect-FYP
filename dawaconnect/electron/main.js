@@ -196,15 +196,16 @@ function pharmacyPhotoMime(buffer) {
   return ''
 }
 
-function validatedPhotoSlot(value) {
-  const slot = String(value || '').toLowerCase()
-  if (!['inside', 'outside'].includes(slot)) throw new Error('Photo type must be inside or outside.')
-  return slot
+function validatedPhotoSlot(value, registration = false) {
+  const slot = String(value || '').trim().toLowerCase()
+  if (slot === 'inside' || slot === 'outside') return slot
+  if (registration && slot === 'licensedocument') return 'licenseDocument'
+  throw new Error(registration ? 'Registration image type is invalid.' : 'Photo type must be inside or outside.')
 }
 
-async function choosePharmacyPhoto() {
+async function choosePharmacyPhoto(title = 'Choose pharmacy photo') {
   const options = {
-    title: 'Choose pharmacy photo',
+    title,
     properties: ['openFile'],
     filters: [{ name: 'Photos', extensions: ['jpg', 'jpeg', 'png', 'webp'] }]
   }
@@ -213,9 +214,9 @@ async function choosePharmacyPhoto() {
   if (result.canceled || !result.filePaths[0]) return null
   const filePath = result.filePaths[0]
   const buffer = await readFile(filePath)
-  if (buffer.length > 5 * 1024 * 1024) throw new Error('Each pharmacy photo must be 5 MB or smaller.')
+  if (buffer.length > 5 * 1024 * 1024) throw new Error('Each registration image must be 5 MB or smaller.')
   const mimeType = pharmacyPhotoMime(buffer)
-  if (!mimeType) throw new Error('Only JPEG, PNG, and WebP pharmacy photos are supported.')
+  if (!mimeType) throw new Error('Only JPEG, PNG, and WebP registration images are supported.')
   return { filePath, buffer, mimeType, previewUrl: `data:${mimeType};base64,${buffer.toString('base64')}` }
 }
 
@@ -520,7 +521,7 @@ app.whenReady().then(async () => {
         data: {
           ...safeData,
           photoUploadWarning: photoUploadErrors.length
-            ? 'Your account was created, but one or more optional photos could not be uploaded. Add them later from Pharmacy Profile.'
+            ? 'Your account was created, but one or more optional registration images could not be uploaded. Pharmacy photos can be added from Pharmacy Profile; contact DawaConnect support if the licence document needs to be added.'
             : ''
         }
       }
@@ -531,8 +532,8 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('photos:registration-pick', async (_event, payload) => {
     try {
-      const slot = validatedPhotoSlot(payload?.slot)
-      const photo = await choosePharmacyPhoto()
+      const slot = validatedPhotoSlot(payload?.slot, true)
+      const photo = await choosePharmacyPhoto(slot === 'licenseDocument' ? 'Choose drug sale licence document image' : 'Choose pharmacy photo')
       if (!photo) return { ok: true, canceled: true }
       registrationPhotoSelections.set(slot, photo)
       return { ok: true, data: { slot, previewUrl: photo.previewUrl, size: photo.buffer.length } }
@@ -543,7 +544,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('photos:registration-clear', async (_event, payload) => {
     try {
-      registrationPhotoSelections.delete(validatedPhotoSlot(payload?.slot))
+      registrationPhotoSelections.delete(validatedPhotoSlot(payload?.slot, true))
       return { ok: true }
     } catch (error) {
       return { ok: false, error: error.message }

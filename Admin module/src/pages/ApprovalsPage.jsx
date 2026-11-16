@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Building2, ClipboardCheck, MapPin, Phone, Mail, FileBadge, Clock3, Eye, CheckCircle2, XCircle, Ban } from "lucide-react";
+import { Building2, ClipboardCheck, MapPin, Phone, Mail, FileBadge, FileImage, Clock3, Eye, CheckCircle2, XCircle, Ban } from "lucide-react";
 import { AdminAPI } from "../lib/api";
 import { useQuery, useDebounced } from "../hooks/useQuery";
 import { cn, formatDate, formatRelative } from "../lib/format";
@@ -23,6 +23,12 @@ function ApprovalCard({ pharmacy, actions, onOpen }) {
       </div>
       <dl className="mt-4 space-y-1.5 text-[13px]">
         <div className="flex gap-2 text-ink-2"><FileBadge className="mt-0.5 h-3.5 w-3.5 shrink-0 text-subtle" /><span className="font-mono text-xs">{pharmacy.license || <span className="text-red-600">Licence missing</span>}</span></div>
+        <div className="flex gap-2 text-ink-2">
+          <FileImage className="mt-0.5 h-3.5 w-3.5 shrink-0 text-subtle" />
+          {pharmacy.licenseDocument?.url
+            ? <a href={pharmacy.licenseDocument.url} target="_blank" rel="noreferrer" className="text-xs font-medium text-brand-700 hover:underline dark:text-brand-300">View licence document</a>
+            : <span className="text-xs text-muted">No document image (optional)</span>}
+        </div>
         <div className="flex gap-2 text-ink-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-subtle" /><span className="line-clamp-2">{address || "Address not provided"}</span></div>
         <div className="flex gap-2 text-ink-2"><Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-subtle" /><span>{pharmacy.phone || "—"}</span></div>
         <div className="flex gap-2 text-ink-2"><Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-subtle" /><span className="truncate">{pharmacy.email || "—"}</span></div>

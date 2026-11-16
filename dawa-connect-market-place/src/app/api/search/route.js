@@ -14,6 +14,7 @@ export async function GET(req) {
     const query = (searchParams.get("query") || "").trim();
     const result = await searchPharmacyCatalog({
       query,
+      category: (searchParams.get("category") || "").trim(),
       page: optionalNumber(searchParams, "page", 1),
       limit: optionalNumber(searchParams, "limit", 12),
       minPrice: optionalNumber(searchParams, "minPrice", 0),
