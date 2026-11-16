@@ -7,7 +7,7 @@ import { useDebounced, useQuery } from "../hooks/useQuery";
 import { formatDate } from "../lib/format";
 import { PageHeader, Toolbar } from "../components/layout/PageHeader";
 import { ConfirmDialog, Modal } from "../components/ui/overlays";
-import { Badge, Button, Card, EmptyState, Field, Input, SearchInput, Select, Skeleton, Textarea } from "../components/ui/primitives";
+import { Badge, Button, Card, EmptyState, Field, Input, SearchInput, Select, Skeleton } from "../components/ui/primitives";
 
 const CATEGORIES = [
   "Analgesic", "Antibiotic", "Antidiabetic", "Antacid", "Antihistamine", "Anti-inflammatory",
@@ -21,12 +21,12 @@ const UNITS = [
 const EMPTY_FORM = {
   displayName: "", brandName: "", genericName: "", category: "Other", unit: "Other", strength: "",
   dosageForm: "", packSize: "", manufacturer: "", drapRegistrationNumber: "", aliases: "", status: "active",
-  sourceName: "", sourceUrl: "", sourceNotes: "", imageSourceUrl: "", rightsConfirmed: false,
+  imageSourceUrl: "", rightsConfirmed: false,
 };
 
 const CSV_TEMPLATE = [
-  "displayName,brandName,genericName,category,unit,strength,dosageForm,packSize,manufacturer,drapRegistrationNumber,aliases,status,sourceName,sourceUrl,sourceNotes",
-  '"Panadol 500mg Tablets","Panadol","Paracetamol","Analgesic","Tablets","500 mg","Tablet","20 tablets","GSK","","Acetaminophen, PCM","active","Manufacturer catalogue","",""',
+  "displayName,brandName,genericName,category,unit,strength,dosageForm,packSize,manufacturer,drapRegistrationNumber,aliases,status",
+  '"Panadol 500mg Tablets","Panadol","Paracetamol","Analgesic","Tablets","500 mg","Tablet","20 tablets","GSK","","Acetaminophen, PCM","active"',
 ].join("\r\n");
 
 function recordForm(record) {
@@ -36,8 +36,7 @@ function recordForm(record) {
     category: record.category || "Other", unit: record.unit || "Other", strength: record.strength || "",
     dosageForm: record.dosageForm || "", packSize: record.packSize || "", manufacturer: record.manufacturer || "",
     drapRegistrationNumber: record.drapRegistrationNumber || "", aliases: (record.aliases || []).join(", "),
-    status: record.status || "active", sourceName: record.source?.name || "", sourceUrl: record.source?.url || "",
-    sourceNotes: record.source?.notes || "", imageSourceUrl: record.image?.sourceUrl || record.source?.url || "",
+    status: record.status || "active", imageSourceUrl: record.image?.sourceUrl || "",
     rightsConfirmed: false,
   };
 }
@@ -78,7 +77,6 @@ function CatalogEditor({ record, onClose, onSaved }) {
         category: form.category, unit: form.unit, strength: form.strength, dosageForm: form.dosageForm,
         packSize: form.packSize, manufacturer: form.manufacturer, drapRegistrationNumber: form.drapRegistrationNumber,
         aliases: form.aliases.split(",").map((value) => value.trim()).filter(Boolean), status: form.status,
-        source: { name: form.sourceName, url: form.sourceUrl, notes: form.sourceNotes },
       };
       let saved = record
         ? await AdminAPI.updateMedicineCatalog(record.id, payload)
@@ -134,14 +132,6 @@ function CatalogEditor({ record, onClose, onSaved }) {
         </div>
       </section>
 
-      <section className="border-t border-line pt-5">
-        <h3 className="text-sm font-semibold text-ink">Verification source</h3>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <Field label="Source name"><Input value={form.sourceName} onChange={set("sourceName")} placeholder="Manufacturer or DRAP" /></Field>
-          <Field label="Source URL"><Input type="url" value={form.sourceUrl} onChange={set("sourceUrl")} /></Field>
-          <Field label="Notes" className="sm:col-span-2"><Textarea value={form.sourceNotes} onChange={set("sourceNotes")} rows={3} placeholder="Verification, licence or matching notes" /></Field>
-        </div>
-      </section>
       {formError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{formError}</p>}
       <div className="hidden" aria-hidden="true">{saving ? "Saving" : ""}</div>
     </form>
