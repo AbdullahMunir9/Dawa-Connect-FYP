@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, ImageOff, Pencil, Pill, Plus, Trash2, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Download, ImageOff, Pencil, Pill, Plus, Trash2, Upload } from "lucide-react";
 import { AdminAPI, errorMessage } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -23,6 +23,11 @@ const EMPTY_FORM = {
   dosageForm: "", packSize: "", manufacturer: "", drapRegistrationNumber: "", aliases: "", status: "active",
   sourceName: "", sourceUrl: "", sourceNotes: "", imageSourceUrl: "", rightsConfirmed: false,
 };
+
+const CSV_TEMPLATE = [
+  "displayName,brandName,genericName,category,unit,strength,dosageForm,packSize,manufacturer,drapRegistrationNumber,aliases,status,sourceName,sourceUrl,sourceNotes",
+  '"Panadol 500mg Tablets","Panadol","Paracetamol","Analgesic","Tablets","500 mg","Tablet","20 tablets","GSK","","Acetaminophen, PCM","active","Manufacturer catalogue","",""',
+].join("\r\n");
 
 function recordForm(record) {
   if (!record) return { ...EMPTY_FORM };
@@ -151,6 +156,9 @@ export default function MedicineCatalogPage() {
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState(undefined);
   const [removeImageFrom, setRemoveImageFrom] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const csvInputRef = useRef(null);
   const setQuery = (value) => { setQueryValue(value); setPage(1); };
   const debounced = useDebounced(query);
   const { data, loading, error, refetch, updatedAt } = useQuery(
@@ -175,6 +183,49 @@ export default function MedicineCatalogPage() {
     }
   }
 
+  function downloadCsvTemplate() {
+    const blob = new Blob([`\uFEFF${CSV_TEMPLATE}`], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "dawaconnect-medicine-catalog-template.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importCsv(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      toast.error("Select a CSV file", "Only .csv catalogue files can be imported.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("CSV file is too large", "The maximum import size is 2 MB (up to 2,000 medicine rows).");
+      return;
+    }
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const result = await AdminAPI.importMedicineCatalogCsv(await file.text());
+      setImportResult(result);
+      if (result.imported > 0) {
+        toast.success("Catalogue import complete", `${result.imported} medicine${result.imported === 1 ? "" : "s"} added. ${result.skipped} skipped.`);
+      } else {
+        toast.error("No medicines were imported", "Review the import summary for duplicate or invalid rows.");
+      }
+      setPage(1);
+      refetch();
+    } catch (errorValue) {
+      toast.error("Could not import catalogue CSV", errorMessage(errorValue));
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -183,8 +234,39 @@ export default function MedicineCatalogPage() {
         onRefresh={refetch}
         refreshing={loading}
         updatedAt={updatedAt}
-        actions={isSuperadmin && <Button size="sm" onClick={() => setEditing(null)}><Plus className="h-4 w-4" /> Add catalogue item</Button>}
+        actions={isSuperadmin && <>
+          <input ref={csvInputRef} type="file" accept=".csv,text/csv" onChange={importCsv} className="hidden" />
+          <Button size="sm" variant="secondary" onClick={downloadCsvTemplate}><Download className="h-4 w-4" /> CSV template</Button>
+          <Button size="sm" variant="secondary" disabled={importing} onClick={() => csvInputRef.current?.click()}><Upload className="h-4 w-4" /> {importing ? "Importing…" : "Import CSV"}</Button>
+          <Button size="sm" onClick={() => setEditing(null)}><Plus className="h-4 w-4" /> Add catalogue item</Button>
+        </>}
       />
+      {importResult && (
+        <Card className="mb-5 border-brand-200 bg-brand-50/40 dark:border-brand-900 dark:bg-brand-950/20">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-ink">CSV import summary</h2>
+              <p className="mt-1 text-sm text-muted">{importResult.imported} of {importResult.totalRows} medicines added; {importResult.skipped} skipped. Imported medicines intentionally have no image until one is added from Edit.</p>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => setImportResult(null)}>Dismiss</Button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Badge tone="success">{importResult.imported} imported</Badge>
+            <Badge tone="neutral">{importResult.duplicateCount} duplicates</Badge>
+            <Badge tone={importResult.invalidCount ? "danger" : "neutral"}>{importResult.invalidCount} invalid</Badge>
+            <Badge tone="warning">{importResult.missingImages} missing images</Badge>
+          </div>
+          {importResult.errors?.length > 0 && (
+            <details className="mt-3 rounded-lg border border-line bg-surface p-3 text-xs text-muted">
+              <summary className="cursor-pointer font-medium text-ink">Review skipped rows</summary>
+              <ul className="mt-2 max-h-40 space-y-1 overflow-auto">
+                {importResult.errors.map((item, index) => <li key={`${item.row || "batch"}-${index}`}>{item.row ? `Row ${item.row}: ` : ""}{item.message}</li>)}
+              </ul>
+              {importResult.errorsTruncated && <p className="mt-2">Only the first 100 issues are shown.</p>}
+            </details>
+          )}
+        </Card>
+      )}
       <Card padded={false}>
         <Toolbar>
           <SearchInput value={query} onChange={setQuery} placeholder="Search brand, generic, manufacturer…" className="w-full sm:w-80" />
@@ -204,7 +286,7 @@ export default function MedicineCatalogPage() {
                     {item.image?.secureUrl ? <img src={item.image.secureUrl} alt={item.image.alt || item.displayName} className="h-full w-full object-contain" /> : <ImageOff className="h-6 w-6 text-subtle" />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2"><h3 className="line-clamp-2 font-semibold text-ink">{item.displayName}</h3><Badge tone={statusTone[item.status] || "neutral"}>{item.status}</Badge></div>
+                    <div className="flex items-start justify-between gap-2"><div className="min-w-0"><h3 className="line-clamp-2 font-semibold text-ink">{item.displayName}</h3>{!item.image?.secureUrl && <Badge tone="warning" className="mt-1"><ImageOff className="h-3 w-3" /> Missing image</Badge>}</div><Badge tone={statusTone[item.status] || "neutral"}>{item.status}</Badge></div>
                     <p className="mt-1 truncate text-sm text-muted">{item.genericName || "Generic name not set"}</p>
                     <p className="mt-1 text-xs text-subtle">{[item.strength, item.dosageForm, item.packSize].filter(Boolean).join(" · ") || "No formulation details"}</p>
                   </div>
@@ -222,6 +304,10 @@ export default function MedicineCatalogPage() {
         )}
         {data && data.total > data.limit && <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3 text-xs text-muted"><span>Page {data.page} of {totalPages}</span><div className="flex gap-1"><Button size="iconSm" variant="ghost" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} aria-label="Previous page"><ChevronLeft className="h-4 w-4" /></Button><Button size="iconSm" variant="ghost" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)} aria-label="Next page"><ChevronRight className="h-4 w-4" /></Button></div></div>}
       </Card>
+
+      {isSuperadmin && <Card className="mt-5">
+        <div className="flex gap-3"><Upload className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" /><div><h3 className="text-sm font-semibold text-ink">Bulk catalogue import</h3><p className="mt-1 text-sm leading-6 text-muted">Download the CSV template, keep the five required columns filled (displayName, brandName, genericName, category and unit), then import up to 2,000 rows at once. Use an exact category and unit from the catalogue form, or use Other. Images are intentionally not accepted in CSV files; add them later by editing each medicine marked <span className="font-medium text-amber-700 dark:text-amber-300">Missing image</span>.</p></div></div>
+      </Card>}
 
       <Card className="mt-5">
         <div className="flex gap-3"><Upload className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" /><div><h3 className="text-sm font-semibold text-ink">How pharmacies use this catalogue</h3><p className="mt-1 text-sm leading-6 text-muted">A pharmacy may select a catalogue suggestion to auto-fill product details, select only a shared image, or ignore the catalogue and create a custom item such as Pampers. Missing catalogue data and image requests are submitted from the Pharmacy Complaints page.</p></div></div>

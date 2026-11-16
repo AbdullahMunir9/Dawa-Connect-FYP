@@ -76,6 +76,11 @@ export const AdminAPI = {
 
   medicineCatalog: (params) => api.get("/admin/medicine-catalog", { params }).then((r) => r.data),
   createMedicineCatalog: (payload) => api.post("/admin/medicine-catalog", payload).then((r) => r.data),
+  importMedicineCatalogCsv: (csvText) => api.post(
+    "/admin/medicine-catalog/import-csv",
+    csvText,
+    { headers: { "Content-Type": "text/csv; charset=utf-8" }, timeout: 60000 },
+  ).then((r) => r.data),
   updateMedicineCatalog: (id, payload) => api.patch(`/admin/medicine-catalog/${id}`, payload).then((r) => r.data),
   uploadMedicineCatalogImage: (id, file, { sourceUrl = "", rightsConfirmed = false } = {}) => api.post(
     `/admin/medicine-catalog/${id}/image`,
