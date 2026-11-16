@@ -17,7 +17,12 @@ function asyncRoute(handler) {
     } catch (error) {
       const status = Number(error?.status) || 400;
       if (status >= 500) console.error('Medicine catalogue API error:', error?.message || error);
-      res.status(status).json({ message: status >= 500 ? 'The medicine catalogue service is temporarily unavailable.' : error.message });
+      const message = status === 503
+        ? error.message
+        : status >= 500
+          ? 'The medicine catalogue service is temporarily unavailable.'
+          : error.message;
+      res.status(status).json({ message });
     }
   };
 }

@@ -1,0 +1,61 @@
+displayName,brandName,genericName,category,unit,strength,dosageForm,packSize,manufacturer,drapRegistrationNumber,aliases,status
+Disposable Baby Diapers - Newborn,Generic,Disposable baby diapers newborn,Baby Care,Pack,,,Newborn pack,,,newborn diapers,active
+Disposable Baby Diapers - Small,Generic,Disposable baby diapers small,Baby Care,Pack,,,Small pack,,,small diapers,active
+Disposable Baby Diapers - Medium,Generic,Disposable baby diapers medium,Baby Care,Pack,,,Medium pack,,,medium diapers,active
+Disposable Baby Diapers - Large,Generic,Disposable baby diapers large,Baby Care,Pack,,,Large pack,,,large diapers,active
+Disposable Baby Diapers - XL,Generic,Disposable baby diapers extra large,Baby Care,Pack,,,XL pack,,,XL diapers,active
+Disposable Baby Diapers - XXL,Generic,Disposable baby diapers double extra large,Baby Care,Pack,,,XXL pack,,,XXL diapers,active
+Baby Diaper Pants - Medium,Generic,Baby diaper pants medium,Baby Care,Pack,,,Medium pack,,,pull up diapers,active
+Baby Diaper Pants - Large,Generic,Baby diaper pants large,Baby Care,Pack,,,Large pack,,,pull up diapers,active
+Baby Diaper Pants - XL,Generic,Baby diaper pants extra large,Baby Care,Pack,,,XL pack,,,pull up diapers,active
+Fragrance-Free Baby Wipes,Generic,Fragrance free baby wipes,Baby Care,Pack,,,Wipes pack,,,wet wipes,active
+Sensitive Baby Wipes,Generic,Sensitive skin baby wipes,Baby Care,Pack,,,Wipes pack,,,wet wipes,active
+Infant Formula - Stage 1,Generic,Infant formula stage 1,Baby Care,Powder,,,Tin or pack,,,first infant milk,active
+Follow-On Formula - Stage 2,Generic,Follow on formula stage 2,Baby Care,Powder,,,Tin or pack,,,follow on milk,active
+Growing-Up Milk - Stage 3,Generic,Growing up milk stage 3,Baby Care,Powder,,,Tin or pack,,,toddler milk,active
+Lactose-Free Infant Formula,Generic,Lactose free infant formula,Baby Care,Powder,,,Tin or pack,,,lactose free baby milk,active
+Baby Rice Cereal,Generic,Rice based baby cereal,Baby Care,Powder,,,Box or pack,,,infant cereal,active
+Baby Wheat and Milk Cereal,Generic,Wheat and milk baby cereal,Baby Care,Powder,,,Box or pack,,,infant cereal,active
+Baby Feeding Bottle - 125 ml,Generic,Baby feeding bottle 125 ml,Baby Care,Device,,,125 ml,,,feeding bottle,active
+Baby Feeding Bottle - 250 ml,Generic,Baby feeding bottle 250 ml,Baby Care,Device,,,250 ml,,,feeding bottle,active
+Feeding Bottle Nipple - Slow Flow,Generic,Feeding bottle nipple slow flow,Baby Care,Pack,,,Single or pack,,,bottle teat,active
+Feeding Bottle Nipple - Medium Flow,Generic,Feeding bottle nipple medium flow,Baby Care,Pack,,,Single or pack,,,bottle teat,active
+Baby Pacifier - 0 to 6 Months,Generic,Baby pacifier 0 to 6 months,Baby Care,Device,,,Single,,,soother,active
+Baby Pacifier - 6 Months Plus,Generic,Baby pacifier 6 months plus,Baby Care,Device,,,Single,,,soother,active
+Feeding Bottle Cleaning Brush,Generic,Feeding bottle cleaning brush,Baby Care,Device,,,Single,,,bottle brush,active
+Baby Shampoo,Generic,Baby shampoo,Baby Care,Solution (ml),,,Bottle,,,infant shampoo,active
+Baby Body Wash,Generic,Baby body wash,Baby Care,Solution (ml),,,Bottle,,,infant wash,active
+Baby Moisturizing Lotion,Generic,Baby moisturizing lotion,Baby Care,Solution (ml),,,Bottle,,,infant lotion,active
+Baby Massage Oil,Generic,Baby massage oil,Baby Care,Solution (ml),,,Bottle,,,infant oil,active
+Baby Powder,Generic,Baby talcum powder,Baby Care,Powder,,,Bottle,,,infant powder,active
+Diaper Rash Barrier Cream,Generic,Diaper rash barrier cream,Baby Care,Cream (g),,,Tube,,,nappy rash cream,active
+Manual Breast Pump,Generic,Manual breast pump,Baby Care,Device,,,Single,,,breastfeeding pump,active
+Breast Milk Storage Bags,Generic,Breast milk storage bags,Baby Care,Pack,,,Bag pack,,,milk freezer bags,active
+Disposable Nursing Pads,Generic,Disposable nursing pads,Personal Care,Pack,,,Pad pack,,,breast pads,active
+Adult Diapers - Medium,Generic,Adult incontinence diapers medium,Personal Care,Pack,,,Medium pack,,,adult briefs,active
+Adult Diapers - Large,Generic,Adult incontinence diapers large,Personal Care,Pack,,,Large pack,,,adult briefs,active
+Adult Diapers - XL,Generic,Adult incontinence diapers extra large,Personal Care,Pack,,,XL pack,,,adult briefs,active
+Disposable Incontinence Underpads,Generic,Disposable incontinence underpads,Personal Care,Pack,,,Underpad pack,,,bed pads,active
+Sanitary Pads - Regular,Generic,Sanitary pads regular,Personal Care,Pack,,,Regular pack,,,menstrual pads,active
+Sanitary Pads - Large,Generic,Sanitary pads large,Personal Care,Pack,,,Large pack,,,menstrual pads,active
+Sanitary Pads - Overnight,Generic,Sanitary pads overnight,Personal Care,Pack,,,Overnight pack,,,night pads,active
+Panty Liners,Generic,Panty liners,Personal Care,Pack,,,Liner pack,,,daily liners,active
+Pregnancy Test Kit,Generic,Urine pregnancy test kit,Personal Care,Pack,,,Single or pack,,,home pregnancy test,active
+Condoms,Generic,Male latex condoms,Personal Care,Pack,,,Pack,,,contraceptive condoms,active
+Digital Thermometer,Generic,Digital clinical thermometer,First Aid,Device,,,Single,,,fever thermometer,active
+Infrared Forehead Thermometer,Generic,Infrared forehead thermometer,First Aid,Device,,,Single,,,non contact thermometer,active
+Blood Glucose Meter,Generic,Blood glucose monitoring meter,Personal Care,Device,,,Single,,,glucometer,active
+Blood Glucose Test Strips,Generic,Blood glucose test strips,Personal Care,Pack,,,Strip pack,,,glucometer strips,active
+Blood Lancets,Generic,Sterile blood lancets,Personal Care,Pack,,,Lancet pack,,,glucose lancets,active
+Digital Blood Pressure Monitor,Generic,Digital blood pressure monitor,Personal Care,Device,,,Single,,,BP monitor,active
+Fingertip Pulse Oximeter,Generic,Fingertip pulse oximeter,Respiratory,Device,,,Single,,,oxygen saturation meter,active
+Compressor Nebulizer,Generic,Compressor nebulizer,Respiratory,Device,,,Single,,,nebulization machine,active
+Metered-Dose Inhaler Spacer,Generic,Inhaler spacer device,Respiratory,Device,,,Single,,,aerochamber,active
+Disposable Surgical Face Masks,Generic,Disposable surgical face masks,Hygiene,Pack,,,Mask pack,,,medical masks,active
+KN95 Respirator Masks,Generic,KN95 respirator masks,Hygiene,Pack,,,Mask pack,,,protective masks,active
+Disposable Examination Gloves,Generic,Disposable examination gloves,Hygiene,Pack,,,Glove box,,,medical gloves,active
+Hand Sanitizer,Generic,Alcohol based hand sanitizer,Hygiene,Solution (ml),,,Bottle,,,hand rub,active
+Hot Water Bottle,Generic,Rubber hot water bottle,Personal Care,Device,,,Single,,,heat bottle,active
+Electric Heating Pad,Generic,Electric heating pad,Personal Care,Device,,,Single,,,heat pad,active
+Digital Weighing Scale,Generic,Digital body weighing scale,Personal Care,Device,,,Single,,,body weight scale,active
+Home First Aid Kit,Generic,Home first aid kit,First Aid,Pack,,,Kit,,,emergency kit,active

@@ -6,37 +6,68 @@ function apiError(message, status = 400) {
   return Object.assign(new Error(message), { status });
 }
 
+function firstConfigured(names) {
+  for (const name of names) {
+    const value = String(process.env[name] || '').trim();
+    if (value) return value;
+  }
+  return '';
+}
+
+function parseCloudinaryUrl(value) {
+  const raw = String(value || '').trim().replace(/^CLOUDINARY_URL\s*=\s*/i, '');
+  if (!raw) return {};
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'cloudinary:' || !parsed.hostname || !parsed.username || !parsed.password) return {};
+    return {
+      cloudName: decodeURIComponent(parsed.hostname),
+      apiKey: decodeURIComponent(parsed.username),
+      apiSecret: decodeURIComponent(parsed.password),
+    };
+  } catch {
+    return {};
+  }
+}
+
 export function medicineCatalogCloudinaryConfig() {
-  const cloudName = String(
-    process.env.MEDICINE_CATALOG_CLOUDINARY_CLOUD_NAME
-    || process.env.PRODUCT_CATALOG_CLOUDINARY_CLOUD_NAME
-    || process.env.PRODUCT_CLOUDINARY_CLOUD_NAME
-    || process.env.CATALOG_CLOUDINARY_CLOUD_NAME
-    || '',
-  ).trim();
-  const apiKey = String(
-    process.env.MEDICINE_CATALOG_CLOUDINARY_API_KEY
-    || process.env.PRODUCT_CATALOG_CLOUDINARY_API_KEY
-    || process.env.PRODUCT_CLOUDINARY_API_KEY
-    || process.env.CATALOG_CLOUDINARY_API_KEY
-    || '',
-  ).trim();
-  const apiSecret = String(
-    process.env.MEDICINE_CATALOG_CLOUDINARY_API_SECRET
-    || process.env.PRODUCT_CATALOG_CLOUDINARY_API_SECRET
-    || process.env.PRODUCT_CLOUDINARY_API_SECRET
-    || process.env.CATALOG_CLOUDINARY_API_SECRET
-    || '',
-  ).trim();
-  const folder = String(
-    process.env.MEDICINE_CATALOG_CLOUDINARY_FOLDER
-    || process.env.PRODUCT_CATALOG_CLOUDINARY_FOLDER
-    || process.env.PRODUCT_CLOUDINARY_FOLDER
-    || process.env.CATALOG_CLOUDINARY_FOLDER
-    || 'dawaconnect/medicine-catalog',
-  ).trim().replace(/^\/+|\/+$/g, '');
+  const urlConfig = parseCloudinaryUrl(firstConfigured([
+    'MEDICINE_CATALOG_CLOUDINARY_URL',
+    'PRODUCT_CATALOG_CLOUDINARY_URL',
+    'PRODUCT_CLOUDINARY_URL',
+    'CATALOG_CLOUDINARY_URL',
+  ]));
+  const cloudName = firstConfigured([
+    'MEDICINE_CATALOG_CLOUDINARY_CLOUD_NAME',
+    'PRODUCT_CATALOG_CLOUDINARY_CLOUD_NAME',
+    'PRODUCT_CLOUDINARY_CLOUD_NAME',
+    'CATALOG_CLOUDINARY_CLOUD_NAME',
+  ]) || urlConfig.cloudName || '';
+  const apiKey = firstConfigured([
+    'MEDICINE_CATALOG_CLOUDINARY_API_KEY',
+    'PRODUCT_CATALOG_CLOUDINARY_API_KEY',
+    'PRODUCT_CLOUDINARY_API_KEY',
+    'CATALOG_CLOUDINARY_API_KEY',
+  ]) || urlConfig.apiKey || '';
+  const apiSecret = firstConfigured([
+    'MEDICINE_CATALOG_CLOUDINARY_API_SECRET',
+    'PRODUCT_CATALOG_CLOUDINARY_API_SECRET',
+    'PRODUCT_CLOUDINARY_API_SECRET',
+    'CATALOG_CLOUDINARY_API_SECRET',
+  ]) || urlConfig.apiSecret || '';
+  const folder = (firstConfigured([
+    'MEDICINE_CATALOG_CLOUDINARY_FOLDER',
+    'PRODUCT_CATALOG_CLOUDINARY_FOLDER',
+    'PRODUCT_CLOUDINARY_FOLDER',
+    'CATALOG_CLOUDINARY_FOLDER',
+  ]) || 'dawaconnect/medicine-catalog').replace(/^\/+|\/+$/g, '');
   if (!cloudName || !apiKey || !apiSecret) {
-    throw apiError('The dedicated medicine catalogue image storage is not configured.', 503);
+    const missing = [
+      !cloudName && 'cloud name',
+      !apiKey && 'API key',
+      !apiSecret && 'API secret',
+    ].filter(Boolean).join(', ');
+    throw apiError(`The dedicated medicine catalogue image storage is missing: ${missing}.`, 503);
   }
   return { cloudName, apiKey, apiSecret, folder };
 }
@@ -103,7 +134,6 @@ export async function uploadMedicineCatalogImage({ catalogKey, displayName, buff
     public_id: publicId,
     overwrite: 'true',
     invalidate: 'true',
-    resource_type: 'image',
   }, { buffer, mimeType });
   if (!result?.secure_url || !result?.public_id) throw apiError('Cloudinary returned an invalid image result.', 502);
   return {
