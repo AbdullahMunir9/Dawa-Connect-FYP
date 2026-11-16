@@ -21,7 +21,7 @@ const UNITS = [
 const EMPTY_FORM = {
   displayName: "", brandName: "", genericName: "", category: "Other", unit: "Other", strength: "",
   dosageForm: "", packSize: "", manufacturer: "", drapRegistrationNumber: "", aliases: "", status: "active",
-  imageSourceUrl: "", rightsConfirmed: false,
+  rightsConfirmed: false,
 };
 
 const CSV_TEMPLATE = [
@@ -36,8 +36,7 @@ function recordForm(record) {
     category: record.category || "Other", unit: record.unit || "Other", strength: record.strength || "",
     dosageForm: record.dosageForm || "", packSize: record.packSize || "", manufacturer: record.manufacturer || "",
     drapRegistrationNumber: record.drapRegistrationNumber || "", aliases: (record.aliases || []).join(", "),
-    status: record.status || "active", imageSourceUrl: record.image?.sourceUrl || "",
-    rightsConfirmed: false,
+    status: record.status || "active", rightsConfirmed: false,
   };
 }
 
@@ -83,7 +82,6 @@ function CatalogEditor({ record, onClose, onSaved }) {
         : await AdminAPI.createMedicineCatalog(payload);
       if (file) {
         saved = await AdminAPI.uploadMedicineCatalogImage(saved.id, file, {
-          sourceUrl: form.imageSourceUrl,
           rightsConfirmed: form.rightsConfirmed,
         });
       }
@@ -126,7 +124,6 @@ function CatalogEditor({ record, onClose, onSaved }) {
           </div>
           <div className="space-y-3">
             <Field label="Image file" hint="JPEG, PNG or WebP, maximum 5 MB."><Input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setFile(event.target.files?.[0] || null)} /></Field>
-            <Field label="Image source URL"><Input type="url" value={form.imageSourceUrl} onChange={set("imageSourceUrl")} placeholder="https://manufacturer.example/product" /></Field>
             {file && <label className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"><input type="checkbox" checked={form.rightsConfirmed} onChange={set("rightsConfirmed")} className="mt-0.5" /><span>I confirm that DawaConnect has permission to store and display this exact product image.</span></label>}
           </div>
         </div>
