@@ -96,9 +96,9 @@ export async function upsertMedicineCatalogRecord(input, { id = null, actor = nu
   return catalogAdminView({ ...document, _id: result.insertedId });
 }
 
-export async function importMedicineCatalogCsv(csvText, { actor = null } = {}) {
+export async function importMedicineCatalogCsv(csvText, { actor = null, database = null } = {}) {
   const rows = parseMedicineCatalogCsv(csvText);
-  const db = await catalogDatabase();
+  const db = database || await catalogDatabase();
   const errors = [];
   const preparedByKey = new Map();
 
