@@ -171,7 +171,7 @@ export function PharmacyDrawer({ pharmacyId, onClose, onChanged }) {
 
           <Tabs className="mt-5" value={tab} onChange={setTab} tabs={[
             { value: "overview", label: "Overview" }, { value: "inventory", label: "Inventory", count: data?.inventory?.total }, { value: "orders", label: "Orders", count: data?.orders?.length },
-            { value: "complaints", label: "Complaints", count: data?.complaints?.length }, { value: "feedback", label: "Reviews & returns", count: (data?.reviews?.length || 0) + (data?.returns?.length || 0) },
+            { value: "complaints", label: "Complaints", count: data?.complaints?.length }, { value: "feedback", label: "Reviews", count: data?.reviews?.length || 0 },
           ]} />
 
           {tab === "overview" && pharmacy && (
@@ -255,8 +255,8 @@ export function PharmacyDrawer({ pharmacyId, onClose, onChanged }) {
           )}
 
           {tab === "feedback" && data && (
-            <div className="mt-4 grid gap-6 lg:grid-cols-2">
-              <section>
+            <div className="mt-4">
+              <section className="max-w-3xl">
                 <h3 className="mb-2 text-sm font-semibold text-ink">Reviews</h3>
                 {data.reviews.length === 0 ? <p className="text-sm text-subtle">No reviews yet.</p> : (
                   <ul className="space-y-2">{data.reviews.map((r) => (
@@ -264,18 +264,6 @@ export function PharmacyDrawer({ pharmacyId, onClose, onChanged }) {
                       <div className="flex items-center justify-between gap-2"><span className="font-medium text-ink">{r.customer || r.customerName || "Customer"}</span><span className="inline-flex items-center gap-1 text-amber-500"><Star className="h-3.5 w-3.5 fill-current" />{r.rating ?? "—"}</span></div>
                       {r.comment && <p className="mt-1 text-ink-2">{r.comment}</p>}
                       <p className="mt-1 text-xs text-subtle">{formatDate(r.createdAt || r.date)}{r.source ? ` · ${r.source}` : ""}</p>
-                    </li>
-                  ))}</ul>
-                )}
-              </section>
-              <section>
-                <h3 className="mb-2 text-sm font-semibold text-ink">Returns & refunds</h3>
-                {data.returns.length === 0 ? <p className="text-sm text-subtle">No return requests.</p> : (
-                  <ul className="space-y-2">{data.returns.map((r) => (
-                    <li key={r._id} className="rounded-xl border border-line p-3 text-sm">
-                      <div className="flex items-center justify-between gap-2"><span className="font-medium text-ink">{r.item || "Return"}{r.qty ? ` × ${r.qty}` : ""}</span><StatusBadge status={r.status} /></div>
-                      <p className="mt-1 text-ink-2">{r.reason || "—"}</p>
-                      <p className="mt-1 text-xs text-subtle">{r.customer || ""} · Order {r.orderId || "—"} · {formatMoney(r.refundAmount)}</p>
                     </li>
                   ))}</ul>
                 )}
