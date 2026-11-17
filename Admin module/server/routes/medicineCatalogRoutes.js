@@ -1,5 +1,5 @@
 import express from 'express';
-import { requireAuth, requireSuperadmin } from '../middleware/auth.js';
+import { requireAuth, requireMedicineCatalogWrite } from '../middleware/auth.js';
 import {
   attachMedicineCatalogImage, attachMedicineCatalogImageFromUrl, listMedicineCatalog, removeMedicineCatalogImage,
   importMedicineCatalogCsv, upsertMedicineCatalogRecord,
@@ -29,13 +29,13 @@ function asyncRoute(handler) {
 
 router.use(requireAuth);
 router.get('/', asyncRoute(async (req) => listMedicineCatalog(req.query)));
-router.post('/import-csv', requireSuperadmin, csvBody, asyncRoute(async (req) => importMedicineCatalogCsv(
+router.post('/import-csv', requireMedicineCatalogWrite, csvBody, asyncRoute(async (req) => importMedicineCatalogCsv(
   req.body,
   { actor: req.admin.id },
 )));
-router.post('/', requireSuperadmin, asyncRoute(async (req) => upsertMedicineCatalogRecord(req.body, { actor: req.admin.id })));
-router.patch('/:id', requireSuperadmin, asyncRoute(async (req) => upsertMedicineCatalogRecord(req.body, { id: req.params.id, actor: req.admin.id })));
-router.post('/:id/image', requireSuperadmin, imageBody, asyncRoute(async (req) => attachMedicineCatalogImage(
+router.post('/', requireMedicineCatalogWrite, asyncRoute(async (req) => upsertMedicineCatalogRecord(req.body, { actor: req.admin.id })));
+router.patch('/:id', requireMedicineCatalogWrite, asyncRoute(async (req) => upsertMedicineCatalogRecord(req.body, { id: req.params.id, actor: req.admin.id })));
+router.post('/:id/image', requireMedicineCatalogWrite, imageBody, asyncRoute(async (req) => attachMedicineCatalogImage(
   req.params.id,
   req.body,
   {
@@ -44,7 +44,7 @@ router.post('/:id/image', requireSuperadmin, imageBody, asyncRoute(async (req) =
     actor: req.admin.id,
   },
 )));
-router.post('/:id/image/import', requireSuperadmin, asyncRoute(async (req) => attachMedicineCatalogImageFromUrl(
+router.post('/:id/image/import', requireMedicineCatalogWrite, asyncRoute(async (req) => attachMedicineCatalogImageFromUrl(
   req.params.id,
   req.body?.imageUrl,
   {
@@ -52,6 +52,6 @@ router.post('/:id/image/import', requireSuperadmin, asyncRoute(async (req) => at
     actor: req.admin.id,
   },
 )));
-router.delete('/:id/image', requireSuperadmin, asyncRoute(async (req) => removeMedicineCatalogImage(req.params.id, req.admin.id)));
+router.delete('/:id/image', requireMedicineCatalogWrite, asyncRoute(async (req) => removeMedicineCatalogImage(req.params.id, req.admin.id)));
 
 export default router;

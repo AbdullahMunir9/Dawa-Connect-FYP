@@ -19,6 +19,8 @@ const decimal = (value) => Math.round((number(value) + Number.EPSILON) * 100) / 
 
 function text(value, limit = 200) {
   return String(value || '')
+    // Intentional: reports are sanitized by replacing ASCII control characters.
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()

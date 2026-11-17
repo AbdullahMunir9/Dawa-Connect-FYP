@@ -201,7 +201,7 @@ export function PharmacyDrawer({ pharmacyId, onClose, onChanged }) {
                   <KeyValue items={[
                     { label: "Display name", value: profile.name }, { label: "Storefront status", value: profile.status || "—" }, { label: "Hours", value: profile.hours || "—" }, { label: "Delivery type", value: profile.deliveryType || "—" },
                     { label: "Delivery charge", value: formatMoney(profile.deliveryCharge) }, { label: "Delivery radius", value: profile.deliveryRadius != null ? `${profile.deliveryRadius} km` : "—" },
-                    { label: "Bank", value: profile.bankName ? `${profile.bankName}${profile.accountNo ? ` · ${profile.accountNo}` : ""}` : "—" }, { label: "Profile updated", value: formatDateTime(profile.updatedAt) },
+                    { label: "Profile updated", value: formatDateTime(profile.updatedAt) },
                   ]} />
                 ) : <p className="text-sm text-subtle">The pharmacy has not opened its app since registering, so no storefront profile exists yet.</p>}
                 {inventory?.categories?.length > 0 && (

@@ -6,6 +6,9 @@ const adminSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, enum: ['superadmin', 'admin'], default: 'admin' },
   status: { type: String, enum: ['pending', 'approved'], default: 'pending' },
+  permissions: {
+    manageMedicineCatalog: { type: Boolean, default: false },
+  },
 }, { timestamps: true });
 
 export default mongoose.model('Admin', adminSchema);

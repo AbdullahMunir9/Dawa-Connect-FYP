@@ -46,8 +46,10 @@ export const AdminAPI = {
   login: (email, password) => api.post("/admin/login", { email, password }).then((r) => r.data),
   signup: (payload) => api.post("/admin/signup", payload).then((r) => r.data),
   me: () => api.get("/admin/me").then((r) => r.data.admin),
+  updateProfile: (name) => api.patch("/admin/profile", { name }).then((r) => r.data.admin),
   admins: () => api.get("/admin/all-admins").then((r) => r.data),
   approveAdmin: (id) => api.put(`/admin/approve/${id}`).then((r) => r.data),
+  setMedicineCatalogAccess: (id, enabled) => api.patch(`/admin/permissions/${id}/medicine-catalog`, { enabled }).then((r) => r.data.admin),
   deleteAdmin: (id) => api.delete(`/admin/delete/${id}`).then((r) => r.data),
 
   dashboard: () => api.get("/users/dashboard").then((r) => r.data),

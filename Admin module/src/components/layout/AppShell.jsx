@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { ShieldCheck, PanelLeftClose, PanelLeftOpen, Menu, X, Sun, Moon, Monitor, LogOut, ChevronDown, Activity } from "lucide-react";
+import { ShieldCheck, PanelLeftClose, PanelLeftOpen, Menu, X, Sun, Moon, Monitor, LogOut, ChevronDown, Activity, UserRoundPen } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import { useBadges } from "../../context/BadgesContext";
 import { useQuery } from "../../hooks/useQuery";
-import { AdminAPI } from "../../lib/api";
+import { AdminAPI, errorMessage } from "../../lib/api";
 import { cn } from "../../lib/format";
-import { Avatar, Menu as DropMenu } from "../ui/primitives";
+import { Avatar, Button, Field, Input, Menu as DropMenu } from "../ui/primitives";
+import { Modal } from "../ui/overlays";
 import { NAV, pageTitle } from "../../lib/nav";
 
 function NavItem({ item, collapsed, badge, onNavigate }) {
@@ -95,35 +96,84 @@ function ApiStatus() {
 }
 
 function Topbar({ setMobileOpen }) {
-  const { admin, logout } = useAuth();
+  const { admin, logout, updateProfile } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileError, setProfileError] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+
+  function openProfile() {
+    setProfileName(admin?.name || "");
+    setProfileError("");
+    setProfileOpen(true);
+  }
+
+  async function saveProfile(event) {
+    event.preventDefault();
+    const name = profileName.trim();
+    if (name.length < 2 || name.length > 80) {
+      setProfileError("Enter your full name using 2–80 characters.");
+      return;
+    }
+    setProfileSaving(true);
+    setProfileError("");
+    try {
+      await updateProfile(name);
+      setProfileOpen(false);
+    } catch (error) {
+      setProfileError(errorMessage(error, "Could not update your profile."));
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-line bg-surface/85 px-4 backdrop-blur-md sm:px-6">
-      <div className="flex min-w-0 items-center gap-2">
-        <button type="button" className="rounded-lg p-2 text-muted hover:bg-surface-3 hover:text-ink lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu className="h-5 w-5" /></button>
-        <h1 className="truncate text-[17px] font-semibold tracking-tight text-ink">{pageTitle(location.pathname)}</h1>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <ApiStatus />
-        <ThemeMenu />
-        <DropMenu
-          trigger={
-            <button type="button" className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-2 hover:bg-surface-3" aria-label="Account menu">
-              <Avatar name={admin?.name} size="sm" />
-              <span className="hidden text-left leading-tight sm:block"><span className="block max-w-32 truncate text-[13px] font-semibold text-ink">{admin?.name}</span><span className="block text-[11px] capitalize text-muted">{admin?.role}</span></span>
-              <ChevronDown className="hidden h-3.5 w-3.5 text-muted sm:block" />
-            </button>
-          }
-          items={[
-            { label: admin?.email || "", disabled: true },
-            "divider",
-            admin?.role === "superadmin" && { label: "Manage admins", icon: ShieldCheck, onClick: () => navigate("/admins") },
-            { label: "Sign out", icon: LogOut, danger: true, onClick: () => logout() },
-          ]}
-        />
-      </div>
-    </header>
+    <>
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-line bg-surface/85 px-4 backdrop-blur-md sm:px-6">
+        <div className="flex min-w-0 items-center gap-2">
+          <button type="button" className="rounded-lg p-2 text-muted hover:bg-surface-3 hover:text-ink lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu className="h-5 w-5" /></button>
+          <h1 className="truncate text-[17px] font-semibold tracking-tight text-ink">{pageTitle(location.pathname)}</h1>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <ApiStatus />
+          <ThemeMenu />
+          <DropMenu
+            trigger={
+              <button type="button" className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-2 hover:bg-surface-3" aria-label="Account menu">
+                <Avatar name={admin?.name} size="sm" />
+                <span className="hidden text-left leading-tight sm:block"><span className="block max-w-32 truncate text-[13px] font-semibold text-ink">{admin?.name}</span><span className="block text-[11px] capitalize text-muted">{admin?.role}</span></span>
+                <ChevronDown className="hidden h-3.5 w-3.5 text-muted sm:block" />
+              </button>
+            }
+            items={[
+              { label: admin?.email || "", disabled: true },
+              "divider",
+              { label: "Edit profile name", icon: UserRoundPen, onClick: openProfile },
+              admin?.role === "superadmin" && { label: "Manage admins", icon: ShieldCheck, onClick: () => navigate("/admins") },
+              { label: "Sign out", icon: LogOut, danger: true, onClick: () => logout() },
+            ]}
+          />
+        </div>
+      </header>
+
+      <Modal
+        open={profileOpen}
+        onClose={profileSaving ? undefined : () => setProfileOpen(false)}
+        title="Edit profile name"
+        description="This name is shown in the Admin console and audit records. Your email and role cannot be changed here."
+        size="sm"
+        closeOnBackdrop={!profileSaving}
+        footer={<><Button variant="secondary" onClick={() => setProfileOpen(false)} disabled={profileSaving}>Cancel</Button><Button type="submit" form="admin-profile-form" loading={profileSaving}>Save name</Button></>}
+      >
+        <form id="admin-profile-form" onSubmit={saveProfile}>
+          <Field label="Full name" required error={profileError}>
+            <Input autoFocus value={profileName} onChange={(event) => setProfileName(event.target.value)} maxLength={80} autoComplete="name" />
+          </Field>
+        </form>
+      </Modal>
+    </>
   );
 }
 

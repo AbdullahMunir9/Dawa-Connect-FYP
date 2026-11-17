@@ -3,6 +3,7 @@ import { BadgeCheck, Camera, ImagePlus, MessageSquare, RefreshCw, Star, Trash2 }
 import { useApp } from '../context/AppContext';
 
 const readOnlyFieldStyle = { background: '#f8fafc', color: '#64748b', cursor: 'not-allowed' };
+const SUPPORTED_DELIVERY_TYPE = 'Self Delivery';
 
 function buildProfileSavePayload(form) {
   return {
@@ -13,9 +14,7 @@ function buildProfileSavePayload(form) {
     logo: form.logo ?? '💊',
     deliveryCharge: form.deliveryCharge ?? 0,
     deliveryRadius: form.deliveryRadius ?? 10,
-    deliveryType: form.deliveryType ?? 'Self Delivery',
-    bankName: form.bankName ?? '',
-    accountNo: form.accountNo ?? ''
+    deliveryType: SUPPORTED_DELIVERY_TYPE
   };
 }
 
@@ -32,9 +31,7 @@ function profileToFormState(p) {
     logo: p.logo ?? '💊',
     deliveryCharge: p.deliveryCharge ?? 0,
     deliveryRadius: p.deliveryRadius ?? 10,
-    deliveryType: p.deliveryType ?? 'Self Delivery',
-    bankName: p.bankName ?? '',
-    accountNo: p.accountNo ?? '',
+    deliveryType: SUPPORTED_DELIVERY_TYPE,
     photos: p.photos ?? {},
     approvalStatus: p.approvalStatus ?? 'unapproved'
   };
@@ -42,7 +39,7 @@ function profileToFormState(p) {
 
 export function ProfilePage() {
   const { pharmacyProfile, setPharmacyProfile, uploadPharmacyPhoto, removePharmacyPhoto, user } = useApp();
-  const [form, setForm] = useState(() => ({ ...pharmacyProfile }));
+  const [form, setForm] = useState(() => profileToFormState(pharmacyProfile));
   const [tab, setTab] = useState('general');
   const [saving, setSaving] = useState(false);
   const [photoBusy, setPhotoBusy] = useState('');
@@ -52,7 +49,7 @@ export function ProfilePage() {
   ).toLowerCase();
 
   useEffect(() => {
-    setForm({ ...pharmacyProfile });
+    setForm(profileToFormState(pharmacyProfile));
   }, [pharmacyProfile]);
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
@@ -85,7 +82,7 @@ export function ProfilePage() {
       <div className="page-hero">
         <div>
           <h2>Pharmacy Profile</h2>
-          <div className="page-subtitle">Keep your public details, delivery setup, and payment settings accurate.</div>
+          <div className="page-subtitle">Keep your public details, photos, and delivery setup accurate.</div>
         </div>
       </div>
       <div className="grid-2" style={{ alignItems: 'start' }}>
@@ -108,8 +105,7 @@ export function ProfilePage() {
               ['🕐', form.hours],
               ['✅', `Approval: ${resolvedApproval === 'approved' ? 'Approved' : resolvedApproval === 'suspended' ? 'Suspended' : 'Unapproved'}`],
               ['📋', `License: ${form.license}`],
-              ['🚚', `Delivery: PKR ${form.deliveryCharge} | ${form.deliveryRadius}km | ${form.deliveryType || 'Self Delivery'}`],
-              ['🏦', `${form.bankName} - ${form.accountNo}`],
+              ['🚚', `Delivery: PKR ${form.deliveryCharge} | ${form.deliveryRadius}km | ${SUPPORTED_DELIVERY_TYPE}`],
             ].map(([icon, val], idx) => (
               <div key={`${icon}-${idx}`} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid #f1f5f9', fontSize: 13, color: '#475569' }}>
                 <span>{icon}</span><span>{val}</span>
@@ -125,7 +121,7 @@ export function ProfilePage() {
         </div>
         <div style={{ padding: '0 24px' }}>
           <div className="tabs" style={{ margin: '16px 0' }}>
-            {[['general', 'General'], ['photos', 'Photos'], ['delivery', 'Delivery'], ['payment', 'Payment']].map(([k, l]) => (
+            {[['general', 'General'], ['photos', 'Photos'], ['delivery', 'Delivery']].map(([k, l]) => (
               <button key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{l}</button>
             ))}
           </div>
@@ -153,12 +149,12 @@ export function ProfilePage() {
               </div>
               <div className="form-group">
                 <label className="form-label">Delivery Type</label>
-                <select className="form-control" value={form.deliveryType || 'Self Delivery'} onChange={e => set('deliveryType', e.target.value)}>
-                  <option>Self Delivery</option>
-                  <option>Third-party (TCS)</option>
-                  <option>Third-party (Leopards)</option>
-                  <option>Both</option>
+                <select className="form-control" value={SUPPORTED_DELIVERY_TYPE} disabled style={readOnlyFieldStyle}>
+                  <option>{SUPPORTED_DELIVERY_TYPE}</option>
                 </select>
+                <small style={{ display: 'block', marginTop: 7, color: '#64748b', lineHeight: 1.5 }}>
+                  DawaConnect currently supports delivery managed directly by the pharmacy.
+                </small>
               </div>
               <div className="alert alert-info">🗺 Map integration shows estimated delivery time based on customer location and distance radius.</div>
             </>)}
@@ -185,10 +181,6 @@ export function ProfilePage() {
                 })}
               </div>
             </>}
-            {tab === 'payment' && (<>
-              <div className="form-group"><label className="form-label">Bank Name</label><input className="form-control" value={form.bankName} onChange={e => set('bankName', e.target.value)} /></div>
-              <div className="form-group"><label className="form-label">Account / IBAN</label><input className="form-control" value={form.accountNo} onChange={e => set('accountNo', e.target.value)} /></div>
-            </>)}
             {tab !== 'photos' && <button type="submit" className="btn btn-primary" style={{ marginTop: 8 }} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>}
           </div>
         </form>

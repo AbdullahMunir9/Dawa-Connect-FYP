@@ -39,10 +39,18 @@ export function AuthProvider({ children }) {
     return data.admin;
   }, []);
 
+  const updateProfile = useCallback(async (name) => {
+    const updated = await AdminAPI.updateProfile(name);
+    session.save(session.token, updated);
+    setAdmin(updated);
+    return updated;
+  }, []);
+
   const value = useMemo(() => ({
-    admin, checking, login, logout, sessionMessage, clearSessionMessage: () => setSessionMessage(""),
+    admin, checking, login, logout, updateProfile, sessionMessage, clearSessionMessage: () => setSessionMessage(""),
     isSuperadmin: admin?.role === "superadmin",
-  }), [admin, checking, login, logout, sessionMessage]);
+    canManageMedicineCatalog: admin?.role === "superadmin" || admin?.permissions?.manageMedicineCatalog === true,
+  }), [admin, checking, login, logout, sessionMessage, updateProfile]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

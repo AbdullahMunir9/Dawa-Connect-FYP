@@ -257,8 +257,8 @@ async function seedInitialData(db, ownerId, payload, session = null) {
       email: payload.email, license: payload.licenseNumber,
       hours: `${payload.openingTime || '08:00'} - ${payload.closingTime || '22:00'}`,
       deliveryCharge: Number(payload.deliveryCharge || 50), deliveryRadius: Number(payload.serviceRadiusKm || 10),
-      ...coordinates, status: 'Open', approvalStatus: 'unapproved', logo: '💊', photos: {},
-      bankName: 'HBL', accountNo: '', createdAt: now, updatedAt: now,
+      ...coordinates, status: 'Open', approvalStatus: 'unapproved', logo: '💊', photos: {}, deliveryType: 'Self Delivery',
+      createdAt: now, updatedAt: now,
     } },
     { upsert: true, ...(session ? { session } : {}) },
   );
@@ -908,7 +908,7 @@ export async function getProfile(ownerId) {
       ownerId, name: user.pharmacyName || 'My Pharmacy', address: user.addressLine1 || '', phone: user.phone || '',
       email: user.email || '', license: user.licenseNumber || '', hours: `${user.openingTime || '08:00'} - ${user.closingTime || '22:00'}`,
       deliveryCharge: Number(user.deliveryCharge || 50), deliveryRadius: Number(user.serviceRadiusKm || 10),
-      status: 'Open', approvalStatus, logo: '💊', bankName: '', accountNo: '',
+      status: 'Open', approvalStatus, logo: '💊', deliveryType: 'Self Delivery',
       latitude: user.latitude, longitude: user.longitude, location: user.location, photos: {}, createdAt: now, updatedAt: now,
     };
     const result = await db.collection('profiles').insertOne(profile);
@@ -918,7 +918,7 @@ export async function getProfile(ownerId) {
     profile.approvalStatus = approvalStatus;
   }
   return {
-    ...mapDoc(profile), approvalStatus, accountStatus: String(user.status || '').toLowerCase(),
+    ...mapDoc(profile), deliveryType: 'Self Delivery', approvalStatus, accountStatus: String(user.status || '').toLowerCase(),
     rejectionReason: user.rejectionReason || '', suspensionReason: user.suspensionReason || '',
   };
 }
@@ -926,12 +926,13 @@ export async function getProfile(ownerId) {
 export async function updateProfile(ownerId, changes) {
   const db = await pharmacyDatabase();
   const existing = await getProfile(ownerId);
-  const allowed = ['name', 'address', 'hours', 'status', 'logo', 'deliveryCharge', 'deliveryRadius', 'deliveryType', 'bankName', 'accountNo'];
+  const allowed = ['name', 'address', 'hours', 'status', 'logo', 'deliveryCharge', 'deliveryRadius'];
   const patch = {};
   for (const key of allowed) {
     if (!Object.hasOwn(changes || {}, key)) continue;
     patch[key] = ['deliveryCharge', 'deliveryRadius'].includes(key) ? Number(changes[key]) : String(changes[key] ?? '').trim();
   }
+  patch.deliveryType = 'Self Delivery';
   patch.updatedAt = new Date();
   await db.collection('profiles').updateOne({ _id: objectId(existing._id, 'profile'), ownerId }, { $set: patch });
   const userPatch = { updatedAt: new Date() };

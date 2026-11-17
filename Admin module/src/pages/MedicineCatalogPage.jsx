@@ -181,7 +181,7 @@ function CatalogEditor({ record, onClose, onSaved }) {
 }
 
 export default function MedicineCatalogPage() {
-  const { isSuperadmin } = useAuth();
+  const { canManageMedicineCatalog } = useAuth();
   const toast = useToast();
   const [query, setQueryValue] = useState("");
   const [status, setStatus] = useState("");
@@ -266,7 +266,7 @@ export default function MedicineCatalogPage() {
         onRefresh={refetch}
         refreshing={loading}
         updatedAt={updatedAt}
-        actions={isSuperadmin && <>
+        actions={canManageMedicineCatalog && <>
           <input ref={csvInputRef} type="file" accept=".csv,text/csv" onChange={importCsv} className="hidden" />
           <Button size="sm" variant="secondary" onClick={downloadCsvTemplate}><Download className="h-4 w-4" /> CSV template</Button>
           <Button size="sm" variant="secondary" disabled={importing} onClick={() => csvInputRef.current?.click()}><Upload className="h-4 w-4" /> {importing ? "Importing…" : "Import CSV"}</Button>
@@ -308,7 +308,7 @@ export default function MedicineCatalogPage() {
 
         {loading && !data && <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-48 rounded-xl" />)}</div>}
         {error && !data && <EmptyState title="Could not load the medicine catalogue" description={error} action={<Button onClick={() => refetch()}>Retry</Button>} />}
-        {data && !rows.length && <EmptyState icon={Pill} title="No catalogue items found" description={query || status ? "Change the filters or add a new catalogue item." : "Add the first verified product and its shared image."} action={isSuperadmin && <Button onClick={() => setEditing(null)}><Plus className="h-4 w-4" /> Add item</Button>} />}
+        {data && !rows.length && <EmptyState icon={Pill} title="No catalogue items found" description={query || status ? "Change the filters or add a new catalogue item." : "Add the first verified product and its shared image."} action={canManageMedicineCatalog && <Button onClick={() => setEditing(null)}><Plus className="h-4 w-4" /> Add item</Button>} />}
         {rows.length > 0 && (
           <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
             {rows.map((item) => (
@@ -329,7 +329,7 @@ export default function MedicineCatalogPage() {
                   <div><dt className="text-subtle">Brand</dt><dd className="mt-0.5 truncate text-ink-2">{item.brandName || "—"}</dd></div>
                   <div><dt className="text-subtle">Updated</dt><dd className="mt-0.5 truncate text-ink-2">{item.updatedAt ? formatDate(item.updatedAt) : "—"}</dd></div>
                 </dl>
-                {isSuperadmin && <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-3"><Button size="sm" variant="secondary" onClick={() => setEditing(item)}><Pencil className="h-3.5 w-3.5" /> Edit</Button>{item.image?.secureUrl && <Button size="sm" variant="dangerOutline" onClick={() => setRemoveImageFrom(item)}><Trash2 className="h-3.5 w-3.5" /> Remove image</Button>}</div>}
+                {canManageMedicineCatalog && <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-3"><Button size="sm" variant="secondary" onClick={() => setEditing(item)}><Pencil className="h-3.5 w-3.5" /> Edit</Button>{item.image?.secureUrl && <Button size="sm" variant="dangerOutline" onClick={() => setRemoveImageFrom(item)}><Trash2 className="h-3.5 w-3.5" /> Remove image</Button>}</div>}
               </article>
             ))}
           </div>
@@ -337,7 +337,7 @@ export default function MedicineCatalogPage() {
         {data && data.total > data.limit && <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3 text-xs text-muted"><span>Page {data.page} of {totalPages}</span><div className="flex gap-1"><Button size="iconSm" variant="ghost" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} aria-label="Previous page"><ChevronLeft className="h-4 w-4" /></Button><Button size="iconSm" variant="ghost" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)} aria-label="Next page"><ChevronRight className="h-4 w-4" /></Button></div></div>}
       </Card>
 
-      {isSuperadmin && <Card className="mt-5">
+      {canManageMedicineCatalog && <Card className="mt-5">
         <div className="flex gap-3"><Upload className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" /><div><h3 className="text-sm font-semibold text-ink">Bulk catalogue import</h3><p className="mt-1 text-sm leading-6 text-muted">Download the CSV template, keep the five required columns filled (displayName, brandName, genericName, category and unit), then import up to 2,000 rows at once. Use an exact category and unit from the catalogue form, or use Other. Images are intentionally not accepted in CSV files; add them later by editing each medicine marked <span className="font-medium text-amber-700 dark:text-amber-300">Missing image</span>.</p></div></div>
       </Card>}
 

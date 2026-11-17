@@ -1,9 +1,14 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
+import pharmacyDb from '../db/pharmacyConnection.js';
 import { prepareCatalogRecord } from './medicineCatalogCore.js';
 import { importMedicineCatalogCsv } from './medicineCatalogService.js';
 
 const header = 'displayName,brandName,genericName,category,unit,strength,dosageForm,packSize,manufacturer,drapRegistrationNumber,aliases,status';
+
+after(async () => {
+  await pharmacyDb.close();
+});
 
 function fakeDatabase(existingKeys = []) {
   const inserted = [];

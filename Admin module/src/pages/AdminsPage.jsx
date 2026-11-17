@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { ShieldCheck, ShieldAlert, Trash2, CheckCircle2, UserPlus, Copy } from "lucide-react";
+import { ShieldCheck, ShieldAlert, Trash2, CheckCircle2, UserPlus, Copy, BookOpenCheck, BookLock } from "lucide-react";
 import { AdminAPI, errorMessage } from "../lib/api";
 import { useQuery } from "../hooks/useQuery";
 import { useAuth } from "../context/AuthContext";
@@ -18,6 +18,7 @@ export default function AdminsPage() {
   const { refresh } = useBadges();
   const { data, loading, error, refetch, updatedAt, setData } = useQuery(() => AdminAPI.admins(), [], { enabled: isSuperadmin });
   const [toDelete, setToDelete] = useState(null);
+  const [permissionBusy, setPermissionBusy] = useState("");
   const pending = useMemo(() => (data || []).filter((a) => a.status === "pending"), [data]);
   if (!isSuperadmin) return <Navigate to="/" replace />;
 
@@ -37,15 +38,35 @@ export default function AdminsPage() {
     refresh();
   }
 
+  async function setCatalogAccess(admin, enabled) {
+    setPermissionBusy(admin.id);
+    try {
+      const updated = await AdminAPI.setMedicineCatalogAccess(admin.id, enabled);
+      setData((list) => list.map((item) => (item.id === admin.id ? updated : item)));
+      toast.success(
+        enabled ? "Catalogue access granted" : "Catalogue access revoked",
+        enabled
+          ? `${admin.name} can now add, edit, import and manage catalogue images.`
+          : `${admin.name} now has read-only catalogue access.`,
+      );
+    } catch (err) {
+      toast.error("Could not update access", errorMessage(err));
+    } finally {
+      setPermissionBusy("");
+    }
+  }
+
   const registerUrl = `${window.location.origin}/register`;
   const columns = [
     { id: "name", header: "Admin", sortable: true, accessor: (r) => r.name, cell: (r) => <div className="flex items-center gap-3"><Avatar name={r.name} size="sm" /><div className="min-w-0"><p className="truncate font-medium text-ink">{r.name}{r.id === me?.id && <span className="ml-2 text-xs font-normal text-muted">(you)</span>}</p><p className="truncate text-xs text-muted">{r.email}</p></div></div> },
     { id: "role", header: "Role", sortable: true, accessor: (r) => r.role, cell: (r) => <Badge tone={r.role === "superadmin" ? "violet" : "neutral"}>{r.role === "superadmin" ? <ShieldAlert className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}{r.role === "superadmin" ? "Super admin" : "Admin"}</Badge> },
     { id: "status", header: "Status", sortable: true, accessor: (r) => r.status, cell: (r) => <StatusBadge status={r.status} /> },
+    { id: "catalogAccess", header: "Catalogue access", sortable: true, accessor: (r) => r.role === "superadmin" || r.permissions?.manageMedicineCatalog === true, hideBelow: "md", cell: (r) => r.role === "superadmin" || r.permissions?.manageMedicineCatalog === true ? <Badge tone="success"><BookOpenCheck className="h-3 w-3" /> {r.role === "superadmin" ? "Always allowed" : "Can manage"}</Badge> : <Badge tone="neutral"><BookLock className="h-3 w-3" /> Read only</Badge> },
     { id: "created", header: "Registered", sortable: true, accessor: (r) => new Date(r.createdAt), hideBelow: "md", cell: (r) => <span className="text-muted" title={formatDateTime(r.createdAt)}>{formatRelative(r.createdAt)}</span> },
     { id: "actions", header: "", align: "right", cell: (r) => (
       <div className="flex justify-end gap-1.5">
         {r.status === "pending" && <Button size="sm" variant="success" onClick={() => approve(r)}><CheckCircle2 className="h-3.5 w-3.5" /> Approve</Button>}
+        {r.role !== "superadmin" && <Button size="sm" variant={r.permissions?.manageMedicineCatalog ? "dangerOutline" : "secondary"} loading={permissionBusy === r.id} onClick={() => setCatalogAccess(r, !r.permissions?.manageMedicineCatalog)}>{r.permissions?.manageMedicineCatalog ? <BookLock className="h-3.5 w-3.5" /> : <BookOpenCheck className="h-3.5 w-3.5" />}{r.permissions?.manageMedicineCatalog ? "Revoke catalogue" : "Grant catalogue"}</Button>}
         {r.role !== "superadmin" && r.id !== me?.id && <Button size="sm" variant="dangerOutline" onClick={() => setToDelete(r)} aria-label={`Remove ${r.name}`}><Trash2 className="h-3.5 w-3.5" /></Button>}
       </div>) },
   ];
@@ -66,9 +87,10 @@ export default function AdminsPage() {
           <div className="mt-4 flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs"><UserPlus className="h-4 w-4 shrink-0 text-muted" /><span className="truncate font-mono text-ink-2">{registerUrl}</span></div>
           <Button variant="secondary" size="sm" className="mt-3 w-full" onClick={() => { navigator.clipboard?.writeText(registerUrl).then(() => toast.success("Link copied")); }}><Copy className="h-3.5 w-3.5" /> Copy registration link</Button>
           <ul className="mt-5 space-y-2 text-xs text-muted">
-            <li>• Super admins can approve and remove admins; admins can do everything else.</li>
+            <li>• Super admins can approve and remove admins and control catalogue write access.</li>
+            <li>• Admins without catalogue permission can still search and view catalogue items.</li>
             <li>• Super admin accounts cannot be deleted from the console.</li>
-            <li>• Every approval and removal is written to the audit log.</li>
+            <li>• Every approval, removal and permission change is written to the audit log.</li>
           </ul>
         </Card>
       </div>

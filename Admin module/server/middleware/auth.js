@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import Admin from '../models/Admin.js';
+import { adminPermissions, canManageMedicineCatalog } from '../services/adminPermissions.js';
 
 export const JWT_SECRET = process.env.JWT_SECRET;
 export const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
@@ -20,6 +21,7 @@ export function adminView(admin) {
     email: admin.email,
     role: admin.role,
     status: admin.status,
+    permissions: adminPermissions(admin),
     createdAt: admin.createdAt,
   };
 }
@@ -45,6 +47,13 @@ export async function requireAuth(req, res, next) {
 export function requireSuperadmin(req, res, next) {
   if (req.admin?.role !== 'superadmin') {
     return res.status(403).json({ message: 'Only a super admin can perform this action.' });
+  }
+  next();
+}
+
+export function requireMedicineCatalogWrite(req, res, next) {
+  if (!canManageMedicineCatalog(req.admin)) {
+    return res.status(403).json({ message: 'Medicine catalogue management access has not been granted to this admin.' });
   }
   next();
 }

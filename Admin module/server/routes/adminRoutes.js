@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import Admin from '../models/Admin.js';
 import { requireAuth, requireSuperadmin, signAdminToken, adminView } from '../middleware/auth.js';
 import { recordAudit } from '../models/AuditLog.js';
+import { normalizeAdminProfileName } from '../services/adminProfile.js';
 
 const router = express.Router();
 const strongPasswordRegex = /^(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
@@ -10,11 +11,10 @@ const strongPasswordRegex = /^(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
 // Signup: the very first admin becomes an approved superadmin; later admins wait for approval.
 router.post('/signup', async (req, res) => {
   try {
-    const name = String(req.body?.name || '').trim();
+    const name = normalizeAdminProfileName(req.body?.name);
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
 
-    if (name.length < 2 || name.length > 80) return res.status(400).json({ message: 'Enter your full name (2–80 characters).' });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ message: 'Enter a valid email address.' });
     if (!strongPasswordRegex.test(password)) {
       return res.status(400).json({ message: 'Password must be at least 8 characters and include at least 1 uppercase letter and 1 special character.' });
@@ -34,6 +34,7 @@ router.post('/signup', async (req, res) => {
         : 'Admin registered successfully. Waiting for Super Admin approval.',
     });
   } catch (error) {
+    if (error?.status === 400) return res.status(400).json({ message: error.message });
     if (error?.code === 11000 && error?.keyPattern?.email) return res.status(400).json({ message: 'Email already in use' });
     res.status(500).json({ message: 'Registration failed. Please try again.' });
   }
@@ -63,10 +64,35 @@ router.get('/me', requireAuth, (req, res) => {
   res.json({ admin });
 });
 
+// Every approved admin can update only their own display name.
+router.patch('/profile', requireAuth, async (req, res) => {
+  try {
+    const name = normalizeAdminProfileName(req.body?.name);
+    const previousName = req.admin.name;
+    const admin = await Admin.findByIdAndUpdate(req.admin.id, { name }, { new: true }).select('-password');
+    if (!admin) return res.status(404).json({ message: 'Admin not found.' });
+
+    if (previousName !== name) {
+      await recordAudit(req, {
+        action: 'admin.profile_name_update',
+        targetType: 'admin',
+        targetId: admin._id,
+        targetLabel: admin.email,
+        summary: `Changed profile name from ${previousName} to ${name}`,
+        meta: { previousName, name },
+      });
+    }
+    res.json({ admin: adminView(admin) });
+  } catch (error) {
+    if (error?.status === 400) return res.status(400).json({ message: error.message });
+    res.status(500).json({ message: 'Could not update your profile.' });
+  }
+});
+
 router.get('/all-admins', requireAuth, requireSuperadmin, async (req, res) => {
   try {
     const admins = await Admin.find().select('-password').sort({ createdAt: -1 }).lean();
-    res.json(admins.map((admin) => ({ ...admin, id: String(admin._id) })));
+    res.json(admins.map(adminView));
   } catch (error) {
     res.status(500).json({ message: 'Could not load admins.' });
   }
@@ -77,9 +103,43 @@ router.put('/approve/:id', requireAuth, requireSuperadmin, async (req, res) => {
     const admin = await Admin.findByIdAndUpdate(req.params.id, { status: 'approved' }, { new: true }).select('-password');
     if (!admin) return res.status(404).json({ message: 'Admin not found' });
     await recordAudit(req, { action: 'admin.approve', targetType: 'admin', targetId: admin._id, targetLabel: admin.email, summary: `Approved admin ${admin.name}` });
-    res.json(admin);
+    res.json(adminView(admin));
   } catch (error) {
     res.status(500).json({ message: 'Could not approve admin.' });
+  }
+});
+
+router.patch('/permissions/:id/medicine-catalog', requireAuth, requireSuperadmin, async (req, res) => {
+  try {
+    if (typeof req.body?.enabled !== 'boolean') {
+      return res.status(400).json({ message: 'The enabled field must be true or false.' });
+    }
+
+    const admin = await Admin.findById(req.params.id);
+    if (!admin) return res.status(404).json({ message: 'Admin not found.' });
+    if (admin.role === 'superadmin') {
+      return res.status(400).json({ message: 'Super admins always have medicine catalogue access.' });
+    }
+
+    const enabled = req.body.enabled;
+    const previous = admin.permissions?.manageMedicineCatalog === true;
+    admin.set('permissions.manageMedicineCatalog', enabled);
+    await admin.save();
+
+    if (previous !== enabled) {
+      await recordAudit(req, {
+        action: enabled ? 'admin.permission.medicine_catalog_grant' : 'admin.permission.medicine_catalog_revoke',
+        targetType: 'admin',
+        targetId: admin._id,
+        targetLabel: admin.email,
+        summary: `${enabled ? 'Granted' : 'Revoked'} medicine catalogue management access for ${admin.name}`,
+        meta: { permission: 'manageMedicineCatalog', enabled },
+      });
+    }
+
+    res.json({ admin: adminView(admin) });
+  } catch (error) {
+    res.status(500).json({ message: 'Could not update medicine catalogue access.' });
   }
 });
 
