@@ -1,7 +1,7 @@
 import express from 'express';
 import { requireAuth, requireSuperadmin } from '../middleware/auth.js';
 import {
-  attachMedicineCatalogImage, listMedicineCatalog, removeMedicineCatalogImage,
+  attachMedicineCatalogImage, attachMedicineCatalogImageFromUrl, listMedicineCatalog, removeMedicineCatalogImage,
   importMedicineCatalogCsv, upsertMedicineCatalogRecord,
 } from '../services/medicineCatalogService.js';
 
@@ -41,6 +41,14 @@ router.post('/:id/image', requireSuperadmin, imageBody, asyncRoute(async (req) =
   {
     sourceUrl: req.get('x-image-source-url') || '',
     rightsConfirmed: String(req.get('x-image-rights-confirmed') || '').toLowerCase() === 'true',
+    actor: req.admin.id,
+  },
+)));
+router.post('/:id/image/import', requireSuperadmin, asyncRoute(async (req) => attachMedicineCatalogImageFromUrl(
+  req.params.id,
+  req.body?.imageUrl,
+  {
+    rightsConfirmed: req.body?.rightsConfirmed === true,
     actor: req.admin.id,
   },
 )));

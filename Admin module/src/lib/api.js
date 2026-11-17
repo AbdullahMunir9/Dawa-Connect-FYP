@@ -87,6 +87,10 @@ export const AdminAPI = {
     file,
     { headers: { "Content-Type": file.type, "x-image-source-url": sourceUrl, "x-image-rights-confirmed": String(rightsConfirmed) } },
   ).then((r) => r.data),
+  importMedicineCatalogImage: (id, imageUrl, { rightsConfirmed = false } = {}) => api.post(
+    `/admin/medicine-catalog/${id}/image/import`,
+    { imageUrl, rightsConfirmed },
+  ).then((r) => r.data),
   removeMedicineCatalogImage: (id) => api.delete(`/admin/medicine-catalog/${id}/image`).then((r) => r.data),
 
   audit: (params) => api.get("/audit", { params }).then((r) => r.data),

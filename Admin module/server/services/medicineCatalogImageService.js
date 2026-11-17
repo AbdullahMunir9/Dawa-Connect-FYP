@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_REMOTE_URL_LENGTH = 2048;
 
 function apiError(message, status = 400) {
   return Object.assign(new Error(message), { status });
@@ -87,6 +88,40 @@ export function validateMedicineCatalogImage(buffer) {
   return mimeType;
 }
 
+export function validateMedicineCatalogImageUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) throw apiError('Enter a direct image URL to import.');
+  if (raw.length > MAX_REMOTE_URL_LENGTH) throw apiError('The image URL is too long.');
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw apiError('Enter a valid HTTPS image URL.');
+  }
+  if (parsed.protocol !== 'https:') throw apiError('Only HTTPS image URLs can be imported.');
+  if (parsed.username || parsed.password) throw apiError('Image URLs containing credentials are not supported.');
+  if (!parsed.hostname) throw apiError('Enter a valid HTTPS image URL.');
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (
+    hostname === 'localhost'
+    || hostname.endsWith('.localhost')
+    || hostname.endsWith('.local')
+    || hostname.endsWith('.internal')
+    || hostname === '0.0.0.0'
+    || hostname === '127.0.0.1'
+    || hostname === '::'
+    || hostname === '::1'
+    || /^10\./.test(hostname)
+    || /^192\.168\./.test(hostname)
+    || /^169\.254\./.test(hostname)
+    || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)
+  ) {
+    throw apiError('Private or local image URLs cannot be imported.');
+  }
+  parsed.hash = '';
+  return parsed.toString();
+}
+
 function signature(params, secret) {
   const value = Object.entries(params)
     .filter(([, item]) => item !== undefined && item !== null && item !== '')
@@ -104,7 +139,8 @@ async function cloudinaryRequest(path, fields, file) {
   Object.entries(signed).forEach(([key, value]) => body.append(key, String(value)));
   body.append('api_key', apiKey);
   body.append('signature', signature(signed, apiSecret));
-  if (file) body.append('file', new Blob([file.buffer], { type: file.mimeType }), 'medicine-image');
+  if (file?.buffer) body.append('file', new Blob([file.buffer], { type: file.mimeType }), 'medicine-image');
+  if (file?.remoteUrl) body.append('file', file.remoteUrl);
   let response;
   try {
     response = await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/image/${path}`, {
@@ -125,6 +161,22 @@ function safePublicIdPart(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 90) || 'medicine';
 }
 
+function imageRecord(result, { displayName, sourceUrl = '', fallbackBytes = 0 }) {
+  if (!result?.secure_url || !result?.public_id) throw apiError('Cloudinary returned an invalid image result.', 502);
+  return {
+    secureUrl: result.secure_url,
+    publicId: result.public_id,
+    width: Number(result.width || 0),
+    height: Number(result.height || 0),
+    format: String(result.format || ''),
+    bytes: Number(result.bytes || fallbackBytes),
+    alt: `${displayName} medicine image`,
+    sourceUrl: String(sourceUrl || '').trim().slice(0, MAX_REMOTE_URL_LENGTH),
+    rightsConfirmed: true,
+    uploadedAt: new Date(),
+  };
+}
+
 export async function uploadMedicineCatalogImage({ catalogKey, displayName, buffer, sourceUrl = '', rightsConfirmed = false }) {
   if (rightsConfirmed !== true) throw apiError('Confirm that DawaConnect has permission to use this product image.');
   const mimeType = validateMedicineCatalogImage(buffer);
@@ -135,19 +187,28 @@ export async function uploadMedicineCatalogImage({ catalogKey, displayName, buff
     overwrite: 'true',
     invalidate: 'true',
   }, { buffer, mimeType });
-  if (!result?.secure_url || !result?.public_id) throw apiError('Cloudinary returned an invalid image result.', 502);
-  return {
-    secureUrl: result.secure_url,
-    publicId: result.public_id,
-    width: Number(result.width || 0),
-    height: Number(result.height || 0),
-    format: String(result.format || ''),
-    bytes: Number(result.bytes || buffer.length),
-    alt: `${displayName} medicine image`,
-    sourceUrl: String(sourceUrl || '').trim().slice(0, 500),
-    rightsConfirmed: true,
-    uploadedAt: new Date(),
-  };
+  return imageRecord(result, { displayName, sourceUrl, fallbackBytes: buffer.length });
+}
+
+export async function importMedicineCatalogImageFromUrl({ catalogKey, displayName, imageUrl, rightsConfirmed = false }) {
+  if (rightsConfirmed !== true) throw apiError('Confirm that DawaConnect has permission to use this product image.');
+  const remoteUrl = validateMedicineCatalogImageUrl(imageUrl);
+  const { folder } = medicineCatalogCloudinaryConfig();
+  const publicId = `${folder}/${safePublicIdPart(catalogKey || displayName)}`;
+  const result = await cloudinaryRequest('upload', {
+    public_id: publicId,
+    overwrite: 'true',
+    invalidate: 'true',
+  }, { remoteUrl });
+  if (Number(result?.bytes || 0) > MAX_IMAGE_BYTES) {
+    try {
+      await deleteMedicineCatalogImage(result.public_id);
+    } catch (error) {
+      console.error('Oversized medicine catalogue import cleanup is pending:', error?.message || error);
+    }
+    throw apiError('Medicine images must be 5 MB or smaller.', 413);
+  }
+  return imageRecord(result, { displayName, sourceUrl: remoteUrl });
 }
 
 export async function deleteMedicineCatalogImage(publicId) {

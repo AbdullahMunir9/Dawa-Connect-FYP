@@ -4,7 +4,9 @@ import {
   buildCatalogImageRemovalUpdate, buildCatalogSearchPlan, catalogPublicView, DEFAULT_MEDICINE_CATEGORIES,
   DEFAULT_MEDICINE_UNITS, normalizeCatalogText, prepareCatalogRecord, rankCatalogRecord,
 } from './medicineCatalogCore.js';
-import { deleteMedicineCatalogImage, uploadMedicineCatalogImage } from './medicineCatalogImageService.js';
+import {
+  deleteMedicineCatalogImage, importMedicineCatalogImageFromUrl, uploadMedicineCatalogImage,
+} from './medicineCatalogImageService.js';
 import { parseMedicineCatalogCsv } from './medicineCatalogCsvCore.js';
 
 const { ObjectId } = mongoose.Types;
@@ -198,6 +200,23 @@ export async function attachMedicineCatalogImage(id, buffer, { sourceUrl = '', r
     rightsConfirmed,
   });
   await db.collection(COLLECTION).updateOne({ _id: medicine._id }, { $set: { image, updatedAt: new Date(), updatedBy: actor } });
+  return catalogAdminView({ ...medicine, image });
+}
+
+export async function attachMedicineCatalogImageFromUrl(id, imageUrl, { rightsConfirmed = false, actor = null } = {}) {
+  const db = await catalogDatabase();
+  const medicine = await db.collection(COLLECTION).findOne({ _id: objectId(id) });
+  if (!medicine) throw apiError('Catalogue medicine not found.', 404);
+  const image = await importMedicineCatalogImageFromUrl({
+    catalogKey: medicine.catalogKey,
+    displayName: medicine.displayName,
+    imageUrl,
+    rightsConfirmed,
+  });
+  await db.collection(COLLECTION).updateOne(
+    { _id: medicine._id },
+    { $set: { image, updatedAt: new Date(), updatedBy: actor } },
+  );
   return catalogAdminView({ ...medicine, image });
 }
 

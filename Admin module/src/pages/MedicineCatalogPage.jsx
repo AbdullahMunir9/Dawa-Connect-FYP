@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, ImageOff, Pencil, Pill, Plus, Trash2, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ImageOff, Link2, Pencil, Pill, Plus, Trash2, Upload } from "lucide-react";
 import { AdminAPI, errorMessage } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -43,18 +43,27 @@ function recordForm(record) {
 function CatalogEditor({ record, onClose, onSaved }) {
   const toast = useToast();
   const [form, setForm] = useState(() => recordForm(record));
+  const [persistedRecord, setPersistedRecord] = useState(record || null);
+  const [imageMethod, setImageMethod] = useState("file");
   const [file, setFile] = useState(null);
+  const [remoteImageUrl, setRemoteImageUrl] = useState("");
+  const [failedPreview, setFailedPreview] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const remotePreview = imageMethod === "url" && /^https:\/\/\S+$/i.test(remoteImageUrl.trim())
+    ? remoteImageUrl.trim()
+    : "";
   const preview = useMemo(
-    () => (file ? URL.createObjectURL(file) : record?.image?.secureUrl || ""),
-    [file, record],
+    () => (imageMethod === "file" && file
+      ? URL.createObjectURL(file)
+      : remotePreview || persistedRecord?.image?.secureUrl || ""),
+    [file, imageMethod, persistedRecord, remotePreview],
   );
 
   useEffect(() => {
-    if (!file || !preview) return undefined;
+    if (imageMethod !== "file" || !file || !preview) return undefined;
     return () => URL.revokeObjectURL(preview);
-  }, [file, preview]);
+  }, [file, imageMethod, preview]);
 
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.type === "checkbox" ? event.target.checked : event.target.value }));
 
@@ -65,11 +74,24 @@ function CatalogEditor({ record, onClose, onSaved }) {
       setFormError("Brand/display name and generic name are required for catalogue medicines.");
       return;
     }
-    if (file && !form.rightsConfirmed) {
+    const selectedFile = imageMethod === "file" ? file : null;
+    const selectedUrl = imageMethod === "url" ? remoteImageUrl.trim() : "";
+    if (selectedUrl) {
+      try {
+        const parsed = new URL(selectedUrl);
+        if (parsed.protocol !== "https:" || parsed.username || parsed.password) throw new Error();
+      } catch {
+        setFormError("Enter a valid public HTTPS image URL without embedded credentials.");
+        return;
+      }
+    }
+    if ((selectedFile || selectedUrl) && !form.rightsConfirmed) {
       setFormError("Confirm that DawaConnect has permission to use this image before uploading it.");
       return;
     }
     setSaving(true);
+    const wasExisting = Boolean(persistedRecord);
+    let catalogueSaved = false;
     try {
       const payload = {
         displayName: form.displayName, brandName: form.brandName, genericName: form.genericName,
@@ -77,19 +99,34 @@ function CatalogEditor({ record, onClose, onSaved }) {
         packSize: form.packSize, manufacturer: form.manufacturer, drapRegistrationNumber: form.drapRegistrationNumber,
         aliases: form.aliases.split(",").map((value) => value.trim()).filter(Boolean), status: form.status,
       };
-      let saved = record
-        ? await AdminAPI.updateMedicineCatalog(record.id, payload)
+      let saved = persistedRecord
+        ? await AdminAPI.updateMedicineCatalog(persistedRecord.id, payload)
         : await AdminAPI.createMedicineCatalog(payload);
-      if (file) {
-        saved = await AdminAPI.uploadMedicineCatalogImage(saved.id, file, {
+      catalogueSaved = true;
+      setPersistedRecord(saved);
+      if (selectedFile) {
+        saved = await AdminAPI.uploadMedicineCatalogImage(saved.id, selectedFile, {
+          rightsConfirmed: form.rightsConfirmed,
+        });
+      } else if (selectedUrl) {
+        saved = await AdminAPI.importMedicineCatalogImage(saved.id, selectedUrl, {
           rightsConfirmed: form.rightsConfirmed,
         });
       }
-      toast.success(record ? "Catalogue item updated" : "Catalogue item created", file ? "The shared product image was uploaded too." : "A neutral fallback image will be used until an image is added.");
+      setPersistedRecord(saved);
+      const imageMessage = selectedUrl
+        ? "Cloudinary imported and stored a permanent copy of the remote image."
+        : selectedFile
+          ? "The shared product image was uploaded too."
+          : "A neutral fallback image will be used until an image is added.";
+      toast.success(wasExisting ? "Catalogue item updated" : "Catalogue item created", imageMessage);
       onSaved(saved);
       onClose();
     } catch (error) {
-      setFormError(errorMessage(error, "Could not save this catalogue item."));
+      const detail = errorMessage(error, "Could not save this catalogue item.");
+      setFormError(!wasExisting && catalogueSaved
+        ? `The catalogue item was created, but its image was not added. ${detail} Correct the image and save again.`
+        : detail);
     } finally {
       setSaving(false);
     }
@@ -120,11 +157,19 @@ function CatalogEditor({ record, onClose, onSaved }) {
         <h3 className="text-sm font-semibold text-ink">Shared catalogue image</h3>
         <div className="mt-4 grid gap-4 sm:grid-cols-[140px_1fr]">
           <div className="grid aspect-square place-items-center overflow-hidden rounded-xl border border-dashed border-line bg-surface-2">
-            {preview ? <img src={preview} alt="Selected catalogue product" className="h-full w-full object-contain" /> : <ImageOff className="h-8 w-8 text-subtle" />}
+            {preview && failedPreview !== preview
+              ? <img src={preview} alt="Selected catalogue product" className="h-full w-full object-contain" onError={() => setFailedPreview(preview)} />
+              : <ImageOff className="h-8 w-8 text-subtle" />}
           </div>
           <div className="space-y-3">
-            <Field label="Image file" hint="JPEG, PNG or WebP, maximum 5 MB."><Input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setFile(event.target.files?.[0] || null)} /></Field>
-            {file && <label className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"><input type="checkbox" checked={form.rightsConfirmed} onChange={set("rightsConfirmed")} className="mt-0.5" /><span>I confirm that DawaConnect has permission to store and display this exact product image.</span></label>}
+            <div className="inline-flex rounded-lg border border-line bg-surface-2 p-1" aria-label="Choose image source">
+              <button type="button" onClick={() => setImageMethod("file")} className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${imageMethod === "file" ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"}`}><Upload className="h-3.5 w-3.5" /> Upload file</button>
+              <button type="button" onClick={() => setImageMethod("url")} className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${imageMethod === "url" ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"}`}><Link2 className="h-3.5 w-3.5" /> Import from URL</button>
+            </div>
+            {imageMethod === "file"
+              ? <Field label="Image file" hint="JPEG, PNG or WebP, maximum 5 MB."><Input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setFile(event.target.files?.[0] || null)} /></Field>
+              : <Field label="Direct HTTPS image URL" hint="Cloudinary will download and permanently store its own copy; the original website will not be used for customer delivery."><Input type="url" inputMode="url" value={remoteImageUrl} onChange={(event) => setRemoteImageUrl(event.target.value)} placeholder="https://manufacturer.example/product-image.webp" maxLength={2048} /></Field>}
+            {((imageMethod === "file" && file) || (imageMethod === "url" && remoteImageUrl.trim())) && <label className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"><input type="checkbox" checked={form.rightsConfirmed} onChange={set("rightsConfirmed")} className="mt-0.5" /><span>I confirm that DawaConnect has permission to store and display this exact product image.</span></label>}
           </div>
         </div>
       </section>
