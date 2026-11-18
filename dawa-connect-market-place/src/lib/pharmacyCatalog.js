@@ -116,7 +116,7 @@ function buildProductView(product, pharmacy) {
     strength: product.catalogSnapshot?.strength || "",
     dosageForm: product.catalogSnapshot?.dosageForm || "",
     manufacturer: product.catalogSnapshot?.manufacturer || "",
-    packSize: product.catalogSnapshot?.packSize || "",
+    packSize: product.packSize || product.catalogSnapshot?.packSize || "",
     pharmacyId: pharmacy.id,
     pharmacyName: pharmacy.name,
     pharmacyCity: pharmacy.city,

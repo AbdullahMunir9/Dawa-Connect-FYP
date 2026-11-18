@@ -66,6 +66,7 @@ function OptimalPharmacyCard({ item, destination, onAdd, loading }) {
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">{item.pharmacyName}</p>
           <Link href={`/product/${item.id}`} className="mt-1 block truncate text-lg font-bold text-gray-950 hover:text-blue-800 hover:underline">{item.name}</Link>
+          {item.packSize && <p className="mt-1 text-xs font-semibold text-teal-700">Pack: {item.packSize}</p>}
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
             <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" /> {Number(item.distanceKm).toFixed(1)} km away</span>
             <span className="inline-flex items-center gap-1"><Truck className="h-4 w-4" /> Delivery {formatPKR(estimate.deliveryFee)}</span>
@@ -559,7 +560,8 @@ function SearchResultsGridInner() {
                       {item.stock > 0 ? "Available" : "Out of Stock"}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-500 mb-3">{item.category}</p>
+                  <p className="text-sm text-gray-500 mb-1">{item.category}</p>
+                  {item.packSize ? <p className="mb-3 text-xs font-semibold text-teal-700">Pack: {item.packSize}</p> : <div className="mb-3" />}
                   <div className="mb-3"><DeliveryBadge item={item} /></div>
 
                   <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">

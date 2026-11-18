@@ -35,6 +35,7 @@ export default function PharmacyProductsGrid({ pharmacy }) {
             <Link href={`/product/${product.id}`} className="block text-lg font-semibold text-gray-900 hover:text-blue-700 mb-2">
               {product.name}
             </Link>
+            {product.packSize && <p className="mb-3 text-xs font-semibold text-teal-700">Pack: {product.packSize}</p>}
             <div className="flex items-center justify-between gap-2">
               <p className="text-blue-900 font-bold">{formatPKR(product.price)}</p>
               <div className="flex items-center gap-2 shrink-0">

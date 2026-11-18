@@ -308,6 +308,17 @@ tbody tr:last-child td { border-bottom: none; }
 .search-bar svg { width: 16px; height: 16px; color: var(--slate-400); flex-shrink: 0; }
 .search-bar input { width: 100%; border: none; outline: none; background: none; color: var(--slate-700); font-size: 13.5px; }
 
+.complaints-toolbar { border-bottom: 1px solid var(--slate-100); }
+.complaints-toolbar-primary { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 20px 12px; }
+.complaints-tabs { flex: 0 1 540px; min-width: 360px; margin: 0; }
+.complaints-filter-group { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex: 1 1 420px; min-width: 0; }
+.complaints-search { flex: 1 1 260px; max-width: 360px; min-width: 190px; background: #fff; }
+.complaints-status-filter { flex: 0 0 190px; width: 190px; }
+.complaints-action-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 20px 14px; }
+.complaints-action-label { color: var(--slate-500); font-size: 12px; font-weight: 600; }
+.complaints-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.complaints-actions .btn { white-space: nowrap; }
+
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
 .progress-bar { background: var(--slate-100); height: 7px; border-radius: 999px; overflow: hidden; }
@@ -331,6 +342,12 @@ tbody tr:last-child td { border-bottom: none; }
 @media (max-width: 1024px) {
   .stats-grid { grid-template-columns: repeat(2,1fr); }
   .form-row-3 { grid-template-columns: 1fr 1fr; }
+  .complaints-toolbar-primary { align-items: stretch; flex-direction: column; gap: 12px; }
+  .complaints-tabs { flex-basis: auto; width: 100%; min-width: 0; }
+  .complaints-filter-group { flex-basis: auto; width: 100%; }
+  .complaints-search { max-width: none; }
+  .complaints-action-row { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .complaints-actions { justify-content: flex-start; width: 100%; }
   .registration-heading { align-items: flex-start; flex-direction: column; }
   .registration-progress { width: 100%; min-width: 0; }
   .registration-form-grid-4 { grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -344,6 +361,12 @@ tbody tr:last-child td { border-bottom: none; }
   .auth-page { grid-template-columns: 1fr; }
   .auth-left { display: none; }
   .grid-2, .grid-3, .stats-grid { grid-template-columns: 1fr; }
+  .complaints-toolbar-primary { padding: 14px 14px 10px; }
+  .complaints-filter-group { align-items: stretch; flex-direction: column; }
+  .complaints-search, .complaints-status-filter { flex-basis: auto; width: 100%; min-width: 0; max-width: none; }
+  .complaints-action-row { padding: 0 14px 14px; }
+  .complaints-actions { display: grid; grid-template-columns: 1fr; }
+  .complaints-actions .btn { justify-content: center; width: 100%; }
   .page-hero { flex-direction: column; align-items: flex-start; }
   .registration-topbar { padding: 0 18px; grid-template-columns: 1fr auto; }
   .registration-brand { display: none; }

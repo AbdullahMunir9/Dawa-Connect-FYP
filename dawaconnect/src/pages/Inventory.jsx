@@ -6,7 +6,7 @@ const UNITS = ['Tablets','Capsules','Syrup (ml)','Suspension (ml)','Injection','
 
 const emptyForm = () => ({
   catalogMedicineId: '', catalogImageId: '', useGenericImage: true,
-  name: '', genericName: '', category: '', price: '', stock: '', threshold: '', expiry: '', unit: '',
+  name: '', genericName: '', category: '', price: '', stock: '', threshold: '', expiry: '', unit: '', packSize: '',
 });
 
 function toDateInputValue(v) {
@@ -78,6 +78,7 @@ export default function Inventory() {
       unit: item.catalogSnapshot?.unit || item.unit,
       strength: item.catalogSnapshot?.strength || '',
       dosageForm: item.catalogSnapshot?.dosageForm || '',
+      packSize: item.catalogSnapshot?.packSize || item.packSize || '',
       manufacturer: item.catalogSnapshot?.manufacturer || '',
       image: item.catalogSnapshot?.image || item.image || null,
     } : null;
@@ -100,7 +101,8 @@ export default function Inventory() {
       stock: item.stock ?? '',
       threshold: item.threshold ?? '',
       expiry: toDateInputValue(item.expiry),
-      unit: item.unit || ''
+      unit: item.unit || '',
+      packSize: item.packSize || item.catalogSnapshot?.packSize || ''
     });
     setCatalogResults([]);
     setCatalogError('');
@@ -148,6 +150,7 @@ export default function Inventory() {
       genericName: medicine.genericName || '',
       category: medicine.category || current.category || 'Other',
       unit: medicine.unit || current.unit || 'Other',
+      packSize: medicine.packSize || '',
     }));
     setCatalogOpen(false);
     setCatalogResults([]);
@@ -211,7 +214,8 @@ export default function Inventory() {
     stock: form.stock === '' ? 0 : Number(form.stock),
     threshold: Number(form.threshold) || 0,
     expiry: form.expiry || null,
-    unit: form.unit.trim() || 'Other'
+    unit: form.unit.trim() || 'Other',
+    packSize: form.packSize.trim()
   });
 
   const handleSubmit = async (e) => {
@@ -449,12 +453,12 @@ export default function Inventory() {
                       <div style={{ color: '#0f766e', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .7 }}>Catalogue details selected</div>
                       <div style={{ marginTop: 3, color: '#0f172a', fontWeight: 800 }}>{catalogSelection.displayName}</div>
                       <div style={{ marginTop: 3, color: '#475569', fontSize: 12 }}>{[catalogSelection.genericName, catalogSelection.strength, catalogSelection.dosageForm].filter(Boolean).join(' · ') || 'DawaConnect catalogue medicine'}</div>
-                      <div style={{ marginTop: 5, color: '#64748b', fontSize: 11.5 }}>Brand, generic name, category and unit were filled for you. All editable fields remain under your control.</div>
+                      <div style={{ marginTop: 5, color: '#64748b', fontSize: 11.5 }}>Brand, generic name, category, unit and pack size were filled for you. All editable fields remain under your control.</div>
                     </div>
                     <button type="button" className="btn btn-secondary btn-xs" onClick={changeCatalogMedicine}>Use custom details</button>
                   </div>
                 )}
-                <div className="form-row">
+                <div className="form-row-3">
                   <div className="form-group">
                     <label className="form-label">Category *</label>
                     <select className="form-control" required value={form.category} onChange={e => set('category', e.target.value)}>
@@ -468,6 +472,10 @@ export default function Inventory() {
                       <option value="">Select unit</option>
                       {UNITS.map(unit => <option key={unit} value={unit}>{unit}</option>)}
                     </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Pack Size <span style={{ color: '#94a3b8', fontWeight: 500 }}>(optional)</span></label>
+                    <input className="form-control" maxLength={80} value={form.packSize} onChange={e => set('packSize', e.target.value)} placeholder="e.g. 20 tablets or 60 mL" />
                   </div>
                 </div>
 

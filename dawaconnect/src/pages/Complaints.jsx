@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 const CATEGORIES = [
   ['order', 'Order problem'], ['delivery', 'Delivery'], ['product', 'Product / stock'], ['payment', 'Payment / settlement'],
   ['service', 'Customer behaviour'], ['platform', 'App or platform issue'], ['account', 'My account / approval'],
-  ['catalog_data', 'Request a catalogue product'], ['catalog_image', 'Request a product image'], ['other', 'Something else'],
+  ['catalog_data', 'Request a catalogue product'], ['catalog_image', 'Request a product image'], ['other', 'Other'],
 ];
 const STATUS_LABEL = { open: 'Open', in_review: 'In review', resolution_pending: 'Awaiting confirmation', resolved: 'Resolved', dismissed: 'Closed' };
 const STATUS_BADGE = { open: 'badge-warning', in_review: 'badge-info', resolution_pending: 'badge-warning', resolved: 'badge-success', dismissed: 'badge-gray' };
@@ -236,22 +236,29 @@ export default function Complaints() {
       </div>
 
       <div className="card">
-        <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
-          <div className="tabs" style={{ margin: 0 }}>
-            <button className={`tab ${tab === 'inbox' ? 'active' : ''}`} onClick={() => setTab('inbox')}>From customers {openInbox > 0 && <span className="nav-badge" style={{ marginLeft: 6 }}>{openInbox}</span>}</button>
-            <button className={`tab ${tab === 'outbox' ? 'active' : ''}`} onClick={() => setTab('outbox')}>Sent to DawaConnect {openOutbox > 0 && <span className="nav-badge" style={{ marginLeft: 6, background: '#2563eb' }}>{openOutbox}</span>}</button>
+        <div className="complaints-toolbar">
+          <div className="complaints-toolbar-primary">
+            <div className="tabs complaints-tabs">
+              <button type="button" className={`tab ${tab === 'inbox' ? 'active' : ''}`} onClick={() => setTab('inbox')}>From customers {openInbox > 0 && <span className="nav-badge" style={{ marginLeft: 6 }}>{openInbox}</span>}</button>
+              <button type="button" className={`tab ${tab === 'outbox' ? 'active' : ''}`} onClick={() => setTab('outbox')}>Sent to DawaConnect {openOutbox > 0 && <span className="nav-badge" style={{ marginLeft: 6, background: '#2563eb' }}>{openOutbox}</span>}</button>
+            </div>
+            <div className="complaints-filter-group">
+              <div className="search-bar complaints-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                <input aria-label="Search complaints" placeholder="Search complaints…" value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+              <select aria-label="Filter complaints" className="form-control complaints-status-filter" value={filter} onChange={(e) => setFilter(e.target.value)}>
+                <option value="active">Active complaints</option><option value="closed">Resolved / previous</option><option value="all">All complaints</option>
+              </select>
+            </div>
           </div>
-          <div className="search-bar" style={{ maxWidth: 240 }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
-          <select className="form-control" style={{ width: 140 }} value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="active">Active complaints</option><option value="closed">Resolved / previous</option><option value="all">All complaints</option>
-          </select>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => startRequest('catalog_data')}>+ Request catalogue product</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => startRequest('catalog_image')}>+ Request product image</button>
-            <button className="btn btn-primary btn-sm" onClick={() => startRequest('platform')}>+ Contact DawaConnect</button>
+          <div className="complaints-action-row">
+            <span className="complaints-action-label">Create a support request</span>
+            <div className="complaints-actions">
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => startRequest('catalog_data')}>+ Request catalogue product</button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => startRequest('catalog_image')}>+ Request product image</button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => startRequest('platform')}>+ Contact DawaConnect</button>
+            </div>
           </div>
         </div>
 

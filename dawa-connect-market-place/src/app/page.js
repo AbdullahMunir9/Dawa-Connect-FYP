@@ -37,6 +37,7 @@ function ProductCard({ product, onAdd }) {
       <div className="flex flex-1 flex-col p-5">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{product.category || "Medicine"}</p>
         <Link href={`/product/${product.id}`} className="mt-1 line-clamp-2 text-[15px] font-semibold leading-snug text-gray-900 hover:text-blue-700">{product.name}</Link>
+        {product.packSize && <p className="mt-1 text-xs font-medium text-teal-700">Pack: {product.packSize}</p>}
         <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-gray-600"><Store className="h-3.5 w-3.5 text-blue-600" /><span className="truncate">{product.pharmacyName}</span></p>
         <div className="mt-auto flex items-center justify-between gap-3 pt-4">
           <div><p className="text-lg font-bold text-gray-900">{formatPKR(product.price)}</p>{product.unit && <p className="text-[11px] text-gray-500">per {product.unit}</p>}</div>

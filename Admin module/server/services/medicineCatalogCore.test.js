@@ -86,7 +86,7 @@ test('creates a pharmacy product that reuses the shared catalogue image', () => 
   const catalog = {
     _id: '507f1f77bcf86cd799439011', catalogKey: 'medicine:panadol',
     displayName: 'Panadol 500mg Tablets', brandName: 'Panadol', genericName: 'Paracetamol',
-    category: 'Analgesic', unit: 'Tablets', strength: '500 mg', dosageForm: 'Tablet',
+    category: 'Analgesic', unit: 'Tablets', strength: '500 mg', dosageForm: 'Tablet', packSize: '20 tablets',
     image: { secureUrl: 'https://res.cloudinary.com/demo/image/upload/panadol.webp', publicId: 'catalog/panadol', width: 600, height: 600 },
   };
   const product = prepareInventoryProduct({
@@ -97,19 +97,31 @@ test('creates a pharmacy product that reuses the shared catalogue image', () => 
   assert.equal(product.price, 0);
   assert.equal(product.stock, 0);
   assert.equal(product.imageUrl, catalog.image.secureUrl);
+  assert.equal(product.packSize, '20 tablets');
   assert.equal(product.catalogSnapshot.genericName, 'Paracetamol');
+});
+
+test('allows a pharmacy to customize the catalogue pack size', () => {
+  const catalog = {
+    _id: '507f1f77bcf86cd799439011', catalogKey: 'medicine:syrup',
+    displayName: 'Example Syrup', category: 'Analgesic', unit: 'Syrup (ml)', packSize: '60 mL',
+  };
+  const product = prepareInventoryProduct({ packSize: '120 mL bottle' }, catalog, null);
+  assert.equal(product.packSize, '120 mL bottle');
+  assert.equal(product.catalogSnapshot.packSize, '60 mL');
 });
 
 test('allows a completely custom pharmacy product without a catalogue reference or image', () => {
   const product = prepareInventoryProduct({
     name: 'Pampers Baby Dry', genericName: '', category: 'Baby Care', unit: 'Pack',
-    price: 1500, stock: 4, threshold: 1,
+    packSize: '24 diapers', price: 1500, stock: 4, threshold: 1,
   }, null, null);
   assert.equal(product.catalogMedicineId, null);
   assert.equal(product.catalogImageId, null);
   assert.equal(product.name, 'Pampers Baby Dry');
   assert.equal(product.category, 'Baby Care');
   assert.equal(product.unit, 'Pack');
+  assert.equal(product.packSize, '24 diapers');
   assert.equal(product.imageUrl, '');
   assert.equal(product.catalogSnapshot, null);
 });

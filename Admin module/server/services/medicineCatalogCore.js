@@ -153,6 +153,7 @@ export function prepareInventoryProduct(input, catalog = null, imageCatalog = ca
   const genericName = text(input?.genericName, 180, catalog?.genericName);
   const category = text(input?.category, 80, catalog?.category || 'Other');
   const unit = text(input?.unit, 80, catalog?.unit || 'Other');
+  const packSize = text(input?.packSize, 80, catalog?.packSize);
   const expiryValue = text(input?.expiry, 30);
   if (expiryValue && Number.isNaN(new Date(expiryValue).getTime())) {
     throw Object.assign(new Error('Enter a valid expiry date or leave it empty.'), { status: 400 });
@@ -173,6 +174,7 @@ export function prepareInventoryProduct(input, catalog = null, imageCatalog = ca
     genericName,
     category,
     unit,
+    packSize,
     price: optionalNumber(input?.price, 'Price'),
     stock: optionalNumber(input?.stock, 'Stock quantity'),
     threshold: optionalNumber(input?.threshold, 'Low-stock alert'),

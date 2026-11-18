@@ -44,6 +44,10 @@ export default async function ProductDetails({ params }) {
                 <dd className="font-semibold text-gray-900 mt-1">{[product.strength, product.dosageForm].filter(Boolean).join(" · ") || "Not specified"}</dd>
               </div>
               <div className="rounded-lg border border-gray-100 p-4">
+                <dt className="text-xs uppercase text-gray-500">Pack size</dt>
+                <dd className="font-semibold text-gray-900 mt-1">{product.packSize || "Not specified"}</dd>
+              </div>
+              <div className="rounded-lg border border-gray-100 p-4">
                 <dt className="text-xs uppercase text-gray-500">Expiry</dt>
                 <dd className="font-semibold text-gray-900 mt-1">{product.expiry || "Not specified"}</dd>
               </div>
