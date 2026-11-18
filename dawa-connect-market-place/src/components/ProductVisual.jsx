@@ -8,14 +8,16 @@ export default function ProductVisual({ image, name = '', className = '' }) {
 
   if (source && failedSource !== source) {
     return (
-      <img
-        src={source}
-        alt={`${name || 'Medicine'} product`}
-        className={`h-full w-full object-contain ${className}`}
-        loading="lazy"
-        onError={() => setFailedSource(source)}
-      />
+      <span className={`relative flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden ${className}`}>
+        <img
+          src={source}
+          alt={`${name || 'Medicine'} product`}
+          className="absolute inset-0 block h-full w-full max-h-full max-w-full object-contain p-2"
+          loading="lazy"
+          onError={() => setFailedSource(source)}
+        />
+      </span>
     );
   }
-  return <span className={className} aria-hidden="true">{typeof image === 'string' && image && !source ? image : '\u{1F48A}'}</span>;
+  return <span className={`flex h-full w-full items-center justify-center overflow-hidden ${className}`} aria-hidden="true">{typeof image === 'string' && image && !source ? image : '\u{1F48A}'}</span>;
 }
